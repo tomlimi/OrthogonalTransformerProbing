@@ -3,9 +3,54 @@ import os
 import sys
 
 import tensorflow as tf
+import bert
+import tensorflow_hub as hub
+
 from tqdm import tqdm
 
-from bert_wrapper import BertWrapper
+#from bert_wrapper import BertWrapper()
+
+class BertWrapper():
+    
+    def __init__(self, modelBertDir, language, size="base", casing="uncased", layer_idx=-1):
+        self.max_seq_length = 128
+        bertDir = os.path.join(modelBertDir, "{}-{}-{}".format(language, size, casing))
+        if not os.path.exists(bertDir):
+            raise ValueError(
+                "The requested Bert model combination {}-{}-{} does not exist".format(language, size, casing))
+    
+        bert_params = bert.params_from_pretrained_ckpt(bertDir)
+    
+        self.bert_layer = bert.BertModelLayer.from_params(bert_params, name="bert")#, out_layer_ndxs=[layer_idx])
+
+        self.bert_layer.apply_adapter_freeze()
+
+        self.model = tf.keras.Sequential([
+            tf.keras.layers.Input(shape=(self.max_seq_length,), dtype='int32', name='input_ids'),
+            self.bert_layer])
+
+        self.model.build(input_shape=(None, self.max_seq_length))
+        
+        checkpointName = os.path.join(bertDir, "bert_model.ckpt")
+        #
+        bert.load_stock_weights(self.bert_layer, checkpointName)
+        
+        vocab_file = os.path.join(bertDir, "vocab.txt")
+        do_lower_case = (casing == "uncased")
+        self.tokenizer = bert.bert_tokenization.FullTokenizer(vocab_file, do_lower_case)
+
+
+    def get_ids(self, tokens):
+        """Token ids from Tokenizer vocab"""
+        token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
+        input_ids = token_ids + [0] * (self.max_seq_length - len(token_ids))
+        return input_ids
+    
+    def __call__(self, sentences):
+        input = tf.constant([self.get_ids((["[CLS]"] + self.tokenizer.tokenize(sentence) + ["[SEP]"])) for sentence in sentences])
+        print(input)
+        all_embs = self.model(input)
+        return all_embs
 
 
 class Probe():
@@ -70,7 +115,8 @@ class DistanceProbe(Probe):
     @tf.function
     def _loss(self, predicted_distances, ):
 
-    #
+        pass
+    
     # @tf.function
     # def forward(self, batch, language):
     #     """ Computes all n^2 pairs of distances after projection
