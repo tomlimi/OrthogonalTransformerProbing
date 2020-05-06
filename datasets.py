@@ -14,24 +14,25 @@ class DependencyDataset:
 		
 		def __init__(self, language, dependency_data):
 			self.language = language
-			self.tokens, self.segments, self.token_len = dependency_data.training_examples()
+			self.wordpieces, self.segments, self.token_len = dependency_data.training_examples()
 			self.target = dependency_data.target_tensor()
 			
-			self.size = self.tokens.shape[0]
+			self.size = self.wordpieces.shape[0]
 			
 	class Batch:
 		
 		def __init__(self, language_data, batch_indices, task, max_token_len=128):
 			self.language = language_data.language
-			self.tokens = tf.gather(language_data.tokens, batch_indices)[:,:max_token_len]
+			self.wordpieces = tf.gather(language_data.wordpieces, batch_indices)[:,:max_token_len]
 			self.segments = tf.gather(language_data.segments, batch_indices)[:,:max_token_len]
 			self.token_len = tf.gather(language_data.token_len, batch_indices)
+			self.max_token_len = tf.repeat(max_token_len, tf.size(batch_indices))
 			if task.lower() == "distance":
 				self.target = tf.gather(language_data.target, batch_indices)[:,:max_token_len,:max_token_len]
 			elif task.lower() == "depth":
 				self.target = tf.gather(language_data.target, batch_indices)[:,:max_token_len]
 			else:
-				raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
+				raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(task))
 
 	class Dataset:
 		def __init__(self, datafiles, languages, task, tokenizer, shuffle_batches=True, seed=42):

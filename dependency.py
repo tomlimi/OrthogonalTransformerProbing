@@ -103,7 +103,7 @@ class Dependency():
                 number_examples -= 1
         
         segments = []
-        bert_len = []
+        max_segment = []
         bert_ids = []
         sent_idx = 0
         for sent_wordpieces, sent_tokens in zip(wordpieces, self.tokens):
@@ -133,12 +133,12 @@ class Dependency():
             else:
                 segments.append(tf.constant(sent_segments, dtype=tf.int64))
                 bert_ids.append(tf.constant(self.get_bert_ids(sent_wordpieces), dtype=tf.int64))
-                bert_len.append(segment_id)
+                max_segment.append(segment_id)
             sent_idx += 1
     
         self.remove_indices(indices_to_rm)
         
-        return tf.stack(bert_ids), tf.stack(segments), tf.constant(bert_len)
+        return tf.stack(bert_ids), tf.stack(segments), tf.constant(max_segment)
         
     
 class DependencyDistance(Dependency):

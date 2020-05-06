@@ -5,12 +5,14 @@ import sys
 import tensorflow as tf
 import bert
 import tensorflow_hub as hub
+from abc import abstractmethod
 
 from tqdm import tqdm
+import numpy as np
 
 #from bert_wrapper import BertWrapper()
 
-class BertWrapper():
+class BertModel():
     
     def __init__(self, modelBertDir, language, size="base", casing="uncased", layer_idx=-1):
         self.max_seq_length = 128
@@ -39,22 +41,19 @@ class BertWrapper():
         do_lower_case = (casing == "uncased")
         self.tokenizer = bert.bert_tokenization.FullTokenizer(vocab_file, do_lower_case)
 
-
-    def get_ids(self, tokens):
-        """Token ids from Tokenizer vocab"""
-        token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
-        input_ids = token_ids + [0] * (self.max_seq_length - len(token_ids))
-        return input_ids
-    
-    def __call__(self, sentences):
-        input = tf.constant([self.get_ids((["[CLS]"] + self.tokenizer.tokenize(sentence) + ["[SEP]"])) for sentence in sentences])
-        print(input)
-        all_embs = self.model(input)
-        return all_embs
+    def __call__(self, wordpiece_ids):
+        embeddings = self.model(wordpiece_ids)
+        return embeddings
 
 
 class Probe():
-    pass
+
+    ES_PATIENCE = 5
+    ES_DELTA = 1e-4
+
+    @abstractmethod
+    def __init__(self, args):
+        pass
 
 
 class DistanceProbe(Probe):
@@ -69,8 +68,9 @@ class DistanceProbe(Probe):
         super(DistanceProbe, self).__init__()
         self.probe_rank = args.probe_ran
         self.model_dim = args.bert_dim
+        self.languages = args.languages
 
-        self.bert_wrapper = BertWrapper("multilingual",args.layer_index)
+        self.bert_model = BertModel(args.bert_dir, "multilingual", layer_idx=args.layer_index)
         self.Distance_Probe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim )),
                                           trainable=True, name='distance_probe')
 
@@ -80,101 +80,123 @@ class DistanceProbe(Probe):
         self._optimizer = tf.optimizers.Adam()
 
     @tf.function
-    def train_on_batch(self, batch, language):
+    def forward(self, batch):
         """ Computes all n^2 pairs of distances after projection
         for each sentence in a batch.
 
         Note that due to padding, some distances will be non-zero for pads.
         Computes (B(h_i-h_j))^T(B(h_i-h_j)) for all i,j
-
-        Args:
-          batch: a batch of word representations of the shape
-            (batch_size, max_seq_len, representation_dim)
-        Returns:
-          A tensor of distances of shape (batch_size, max_seq_len, max_seq_len)
         """
-
-        with tf.GradientTape() as tape:
-            predicted_distances = self.forward(batch["features"], language)
-            loss = self._loss(predicted_distances, batch["distances"])
-
-    @tf.function
-    def forward(self, features, language):
-        embeddings = self.bert_wrapper.model_fn(features, tf.estimator.ModeKeys.PREDICT)
-        embeddings = self.Language_Maps[language] @ embeddings
+        embeddings = self.bert_model(batch.wordpieces)
+        print(embeddings.shape)
+        # average wordpieces to obtain word representation
+        # cut to max nummber of words in batch
+        embeddings = tf.map_fn(tf.math.unsorted_segment_mean, [embeddings, batch.segments, batch.max_token_len])
+        embeddings = self.Language_Maps[batch.language] @ embeddings
         embeddings = self.Distance_Probe @ embeddings
-        # batchlen, seqlen, rank \
-        embeddings_shape = tf.shape(embeddings)
-        embeddings = tf.expand_dims(embeddings,1)
-        # embeddings = transformed.expand(-1, -1, seqlen, -1)
-        transposed_embeddings = tf.transpose(embeddings, perm=(1, 2))
-        diffs = embeddings - transposed_embeddings
-        squared_diffs = tf.reduce_sum(tf.math.square(diffs), axis=-1)
+        #embeddings_shape = tf.shape(embeddings)
+        embeddings = tf.expand_dims(embeddings, 1)  # shape [batch, 1, seq_len, emb_dim]
+        transposed_embeddings = tf.transpose(embeddings, perm=(1, 2))  # shape [batch, seq_len, 1, emb_dim]
+        diffs = embeddings - transposed_embeddings  # shape [batch, seq_len, seq_len, emb_dim]
+        squared_diffs = tf.reduce_sum(tf.math.square(diffs), axis=-1) # shape [batch, seq_len, seq_len]
         return squared_diffs
 
     @tf.function
-    def _loss(self, predicted_distances, ):
+    def _loss(self, predicted_distances, gold_distances, token_lens):
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_distances - gold_distances), axis=[1,2]) / (token_lens ** 2)
+        return tf.reduce_mean(sentence_loss)
 
-        pass
-    
-    # @tf.function
-    # def forward(self, batch, language):
-    #     """ Computes all n^2 pairs of distances after projection
-    #     for each sentence in a batch.
-    #
-    #     Note that due to padding, some distances will be non-zero for pads.
-    #     Computes (B(h_i-h_j))^T(B(h_i-h_j)) for all i,j
-    #
-    #     Args:
-    #       batch: a batch of word representations of the shape
-    #         (batch_size, max_seq_len, representation_dim)
-    #     Returns:
-    #       A tensor of distances of shape (batch_size, max_seq_len, max_seq_len)
-    #     """
-    #
-    #
-    #     transformed = self.Distance_Probe @ self.Language_Maps[language] @ batch
-    #     batchlen, seqlen, rank = transformed.size()
-    #     transformed = transformed.unsqueeze(2)
-    #     transformed = transformed.expand(-1, -1, seqlen, -1)
-    #     transposed = transformed.transpose(1, 2)
-    #     diffs = transformed - transposed
-    #     squared_diffs = diffs.pow(2)
-    #     squared_distances = torch.sum(squared_diffs, -1)
-    #     return squared_distances
+    @tf.function
+    def train_on_batch(self, batch):
+
+        with tf.GradientTape() as tape:
+            predicted_distances = self.forward(batch)
+            loss = self._loss(predicted_distances, batch.target, batch.token_len)
+
+        variables = [self.Distance_Probe, self.Language_Maps[batch.language]]
+        gradients = tape.gradient(loss, variables)
+        self._optimizer.apply_gradients(zip(gradients, variables))
+
+        tf.summary.experimental.set_step(self._optimizer.iterations)
+        with self._writer.as_default(), tf.summary.record_if(self._optimizer.iterations % 100 == 0):
+            for metric_name, metric in self._metrics.items():
+                tf.summary.scalar("train/" + metric_name, metric.result())
+
+        return loss
+
+    def train(self, dep_dataset, args):
+        curr_patience = 0
+        best_weights = None
+
+        for epoch_idx in range(args.epochs):
+            for train_batch in tqdm(dep_dataset.train.train_batches(args.batch_size)):
+                batch_loss = self.train_batch(train_batch)
+
+            #TODO: method to save variables/network
+            # eval_loss = self.evaluate(dep_dataset.dev, 'validation', args)
+            #
+            # if eval_loss < self.lowest_loss - self.ES_DELTA:
+            #     self.lowest_loss = eval_loss
+            #     best_weights = self.model.get_weights()
+            #     curr_patience = 0
+            # else:
+            #     curr_patience += 1
+            #
+            # if curr_patience > self.ES_PATIENCE:
+            #     self.model.set_weights(best_weights)
+            #     break
+
+    def evaluate_batch(self, batch):
+        predicted_distances = self.forward(batch)
+        loss = self._loss(predicted_distances, batch.target, batch.token_len)
+        return loss
+
+    def evaluate(self, data, data_name, args):
+        all_losses = np.zeros((len(self.languages)))
+        for lang_idx, language in self.languages:
+            progressbar = tqdm(data.evaluate_batches(args.batch_size))
+            for batch_idx, batch in enumerate(progressbar):
+                batch_loss = self.evaluate_batch(batch)
+                progressbar.set_description(f"Evaluating on {language}! loss: {batch_loss}")
+
+                all_losses[lang_idx] += batch_loss
+
+            all_losses[lang_idx] = all_losses[lang_idx] / (batch_idx + 1)
+
+        return all_losses.mean()
 
 
 class OneWordPSDProbe(Probe):
     """ Computes squared L2 norm of words after projection by a matrix."""
 
-    def __init__(self, args):
-        print('Constructing OneWordPSDProbe')
-        super(OneWordPSDProbe, self).__init__()
-        self.args = args
-        self.probe_rank = args['probe']['maximum_rank']
-        self.model_dim = args['model']['hidden_dim']
-        self.proj = tf.nn.Parameter(data=torch.zeros(self.model_dim, self.probe_rank))
-        tf.nn.init.uniform_(self.proj, -0.05, 0.05)
-        self.to(args['device'])
-
-    def forward(self, batch):
-        """ Computes all n depths after projection
-        for each sentence in a batch.
-
-        Computes (Bh_i)^T(Bh_i) for all i
-
-        Args:
-          batch: a batch of word representations of the shape
-            (batch_size, max_seq_len, representation_dim)
-        Returns:
-          A tensor of depths of shape (batch_size, max_seq_len)
-        """
-        transformed = torch.matmul(batch, self.proj)
-        batchlen, seqlen, rank = transformed.size()
-        norms = torch.bmm(transformed.view(batchlen * seqlen, 1, rank),
-                          transformed.view(batchlen * seqlen, rank, 1))
-        norms = norms.view(batchlen, seqlen)
-        return norms
+    # def __init__(self, args):
+    #     print('Constructing OneWordPSDProbe')
+    #     super(OneWordPSDProbe, self).__init__()
+    #     self.args = args
+    #     self.probe_rank = args['probe']['maximum_rank']
+    #     self.model_dim = args['model']['hidden_dim']
+    #     self.proj = tf.nn.Parameter(data=torch.zeros(self.model_dim, self.probe_rank))
+    #     tf.nn.init.uniform_(self.proj, -0.05, 0.05)
+    #     self.to(args['device'])
+    #
+    # def forward(self, batch):
+    #     """ Computes all n depths after projection
+    #     for each sentence in a batch.
+    #
+    #     Computes (Bh_i)^T(Bh_i) for all i
+    #
+    #     Args:
+    #       batch: a batch of word representations of the shape
+    #         (batch_size, max_seq_len, representation_dim)
+    #     Returns:
+    #       A tensor of depths of shape (batch_size, max_seq_len)
+    #     """
+    #     transformed = torch.matmul(batch, self.proj)
+    #     batchlen, seqlen, rank = transformed.size()
+    #     norms = torch.bmm(transformed.view(batchlen * seqlen, 1, rank),
+    #                       transformed.view(batchlen * seqlen, rank, 1))
+    #     norms = norms.view(batchlen, seqlen)
+    #     return norms
 
 
 
