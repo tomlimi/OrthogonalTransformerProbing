@@ -21,7 +21,7 @@ class BertWrapper():
     
         bert_params = bert.params_from_pretrained_ckpt(bertDir)
     
-        self.bert_layer = bert.BertModelLayer.from_params(bert_params, name="bert")#, out_layer_ndxs=[layer_idx])
+        self.bert_layer = bert.BertModelLayer.from_params(bert_params, name="bert", out_layer_ndxs=[layer_idx])
 
         self.bert_layer.apply_adapter_freeze()
 
@@ -153,8 +153,8 @@ class OneWordPSDProbe(Probe):
         self.args = args
         self.probe_rank = args['probe']['maximum_rank']
         self.model_dim = args['model']['hidden_dim']
-        self.proj = nn.Parameter(data=torch.zeros(self.model_dim, self.probe_rank))
-        nn.init.uniform_(self.proj, -0.05, 0.05)
+        self.proj = tf.nn.Parameter(data=torch.zeros(self.model_dim, self.probe_rank))
+        tf.nn.init.uniform_(self.proj, -0.05, 0.05)
         self.to(args['device'])
 
     def forward(self, batch):

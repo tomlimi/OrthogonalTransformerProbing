@@ -174,8 +174,7 @@ class DependencyDistance(Dependency):
         '''Computes path distance between a pair of words
 
         Args:
-          dependency_tree: an Observation namedtuple, with a head_indices field.
-              or None, if head_indies != None
+          dependency_tree: list of tuples (dependent, head) sorted by dependent indicies.
           i: one of the two words to compute the distance between.
           j: one of the two words to compute the distance between.
           head_indices: the head indices (according to a dependency parse) of all
@@ -246,8 +245,7 @@ class DependencyDepth(Dependency):
         '''Computes tree depth for a single word in a sentence
 
         Args:
-          observation: an Observation namedtuple, with a head_indices field.
-              or None, if head_indies != None
+          dependency_tree: list of tuples (dependent, head) sorted by dependent indicies.
           i: the word in the sentence to compute the depth of
           head_indices: the head indices (according to a dependency parse) of all
               words, or None, if observation != None.
