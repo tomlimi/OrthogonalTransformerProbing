@@ -1,80 +1,50 @@
 from collections import defaultdict, OrderedDict
+import numpy as np
+import tensorflow as tf
 
 from unidecode import unidecode
 
 
 class Dependency():
-
-    pos_labels = ('ADJ', 'ADP', 'ADV', 'AUX', 'CCONJ', 'DET', 'INTJ', 'NOUN', 'NUM',
-                  'PART', 'PRON', 'PROPN', 'PUNCT', 'SCONJ', 'SYM', 'VERB', 'X')
-
-    label_map = OrderedDict({'acl': 'adj-clause',
-                             'advcl': 'adv-clause',
-                             'advmod': 'adv-modifier',
-                             'amod': 'adj-modifier',
-                             'appos': 'apposition',
-                             'aux': 'auxiliary',
-                             'xcomp': 'clausal',
-                             'ccomp': 'clausal',
-                             'parataxis': 'parataxis',
-                             'compound': 'compound',
-                             'conj': 'conjunct',
-                             'cc': 'cc',
-                             'csubj': 'clausal-subject',
-                             'det': 'determiner',
-                             'nmod': 'noun-modifier',
-                             'nsubj': 'subject',
-                             'nummod': 'num-modifier',
-                             'iobj': 'object',
-                             'obj': 'object',
-                             'punct': 'punctuation',
-                             'case': 'case',
-                             'mark': 'mark',
-                             'root': 'root'})
-
-    reverse_label_map = {v: k for k, v in label_map.items()}
-
-    LABEL_OTHER = 'other'
-    LABEL_ALL = 'all'
-
+    
+    MAX_TOKENS = 100
+    MAX_WORDPIECES = 128
+    
     CONLLU_ID = 0
     CONLLU_ORTH = 1
     CONLLU_POS = 3
     CONLLU_HEAD = 6
     CONLLU_LABEL = 7
 
-    def __init__(self, conll_file):
+    def __init__(self, conll_file, bert_tokenizer):
+
+        self.conllu_name = conll_file
+        self.tokenizer = bert_tokenizer
 
         self.tokens = []
         self.relations = []
-        self.labeled_relations = []
         self.roots = []
-        self.wordpieces2tokens = []
 
         self.read_conllu(conll_file)
 
-    @classmethod
-    def transform_label(cls, label):
-        """Maps UD labels to labels specified in label_map. Returns 'other' for unknown labels"""
-        label = label.split(':')[0]  # to cope with nsubj:pass for instance
-        if label in cls.label_map:
-            label = cls.label_map[label]
-        else:
-            label = cls.LABEL_OTHER
-        return label
-    
     @property
     def unlabeled_relations(self):
-        """Returns lists of tuples of dependent and its head or each sentence."""
-        return [[rel for rel in sent_relations[self.LABEL_ALL]] for sent_relations in self.relations]
-
+        return [{dep: parent for dep, parent in sent_relation} for sent_relation in self.relations]
+    
     @property
-    def unlabeled_relations_dict(self):
-        return [{dep: parent for dep, parent in sent_relation[self.LABEL_ALL]} for sent_relation in self.relations]
+    def word_count(self):
+        return [len(sent_relation) for sent_relation in self.relations]
+    
+    def remove_indices(self, indices_to_rm):
+        if self.tokens:
+            self.tokens = [v for i, v in enumerate(self.tokens) if i not in indices_to_rm]
+        if self.relations:
+            self.relations = [v for i, v in enumerate(self.relations) if i not in indices_to_rm]
+        if self.roots:
+            self.roots = [v for i, v in enumerate(self.roots) if i not in indices_to_rm]
 
     def read_conllu(self, conll_file_path):
-        sentence_relations = defaultdict(list)
-        sentence_labeled_relations = []
+        sentence_relations = []
         sentence_tokens = []
 
         with open(conll_file_path, 'r') as in_conllu:
@@ -82,9 +52,7 @@ class Dependency():
             for line in in_conllu:
                 if line == '\n':
                     self.relations.append(sentence_relations)
-                    sentence_relations = defaultdict(list)
-                    self.labeled_relations.append(sentence_labeled_relations)
-                    sentence_labeled_relations = []
+                    sentence_relations = []
                     self.tokens.append(sentence_tokens)
                     sentence_tokens = []
                     sentid += 1
@@ -93,59 +61,209 @@ class Dependency():
                 else:
                     fields = line.strip().split('\t')
                     if fields[self.CONLLU_ID].isdigit():
-                        head_id = int(fields[self.CONLLU_HEAD]) - 1
-                        dep_id = int(fields[self.CONLLU_ID]) - 1
-                        original_label = fields[self.CONLLU_LABEL]
-                        label = self.transform_label(original_label)
+                        head_id = int(fields[self.CONLLU_HEAD])
+                        dep_id = int(fields[self.CONLLU_ID])
+                        sentence_relations.append((dep_id, head_id))
 
-                        sentence_relations[label].append((dep_id, head_id))
-                        sentence_relations[self.LABEL_ALL].append((dep_id, head_id))
-
-                        sentence_labeled_relations.append((dep_id, head_id, original_label))
-                        if head_id < 0:
-                            self.roots.append(int(fields[self.CONLLU_ID]) -1)
+                        if head_id == 0:
+                            self.roots.append(int(fields[self.CONLLU_ID]))
 
                         sentence_tokens.append(fields[self.CONLLU_ORTH])
 
-    # def group_wordpieces(self, wordpieces_file):
-    #     '''
-    #     Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
-    #
-    #     :param wordpieces_all: lists of BPE pieces for each sentence
-    #     :return: group_ids_all list of grouped token ids, e.g. for a BPE sentence:
-    #     "Mr. Kowal@@ ski called" joined to "Mr. Kowalski called" it would be [[0], [1, 2], [3]]
-    #     '''
-    #
-    #     with open(wordpieces_file, 'r') as in_file:
-    #         wordpieces = [wp_sentence.strip().split() for wp_sentence in in_file.readlines()]
-    #
-    #     grouped_ids_all = []
-    #     tokens_out_all = []
-    #     idx = 0
-    #     for wordpieces, conllu_tokens in zip(wordpieces, self.tokens):
-    #         conllu_id = 0
-    #         curr_token = ''
-    #         grouped_ids = []
-    #         tokens_out = []
-    #         wp_ids = []
-    #         for wp_id, wp in enumerate(wordpieces):
-    #             wp_ids.append(wp_id)
-    #             if wp.endswith('@@'):
-    #                 curr_token += wp[:-2]
-    #             else:
-    #                 curr_token += wp
-    #             if unidecode(curr_token).lower() == unidecode(conllu_tokens[conllu_id]).lower():
-    #                 grouped_ids.append(wp_ids)
-    #                 wp_ids = []
-    #                 tokens_out.append(curr_token)
-    #                 curr_token = ''
-    #                 conllu_id += 1
-    #         try:
-    #             assert conllu_id == len(conllu_tokens), f'{idx} \n' \
-    #                                                     f'bert count {conllu_id} tokens{tokens_out} \n' \
-    #                                                     f'conllu count {len(conllu_tokens)}, tokens {conllu_tokens}'
-    #         except AssertionError:
-    #             self.wordpieces2tokens.append(None)
-    #         else:
-    #             self.wordpieces2tokens.append(grouped_ids)
-    #         idx += 1
+    def get_bert_ids(self, wordpieces):
+        """Token ids from Tokenizer vocab"""
+        token_ids = self.tokenizer.convert_tokens_to_ids(wordpieces)
+        input_ids = token_ids + [0] * (self.MAX_WORDPIECES - len(wordpieces))
+        return input_ids
+
+    def training_examples(self):
+        '''
+        Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
+
+        :param wordpieces_all: lists of BPE pieces for each sentence
+        :return:
+            2-D tensor  [num valid sentences, max num wordpieces] bert wordpiece ids,
+            2-D tensor [num valid sentences, max num wordpieces] wordpiece to word segment mappings
+            1-D tensor [num valide sentenes] number of words in each sentence
+        '''
+        
+        number_examples = len(self.tokens)
+        wordpieces = []
+        indices_to_rm = []
+        for idx, sent_tokens in enumerate(self.tokens[:]):
+            sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens))) + ["[SEP]"]
+            wordpieces.append(sent_wordpieces)
+            if len(sent_tokens) >= self.MAX_TOKENS:
+                print(f"Sentence {idx} too many tokens in file {self.conllu_name}, skipping.")
+                indices_to_rm.append(idx)
+                number_examples -= 1
+            elif len(sent_wordpieces) >= self.MAX_WORDPIECES:
+                print(f"Sentence {idx} too many wordpieces in file {self.conllu_name}, skipping.")
+                indices_to_rm.append(idx)
+                number_examples -= 1
+        
+        segments = []
+        bert_len = []
+        bert_ids = []
+        sent_idx = 0
+        for sent_wordpieces, sent_tokens in zip(wordpieces, self.tokens):
+            if sent_idx in indices_to_rm:
+                sent_idx += 1
+                continue
+            
+            sent_segments = np.zeros((self.MAX_WORDPIECES,), dtype=np.int64) - 1
+            segment_id = 0
+            curr_token = ''
+            for wp_id, wp in enumerate(sent_wordpieces):
+                if wp in ('[CLS]', '[SEP]'):
+                    continue
+                    
+                sent_segments[wp_id] = segment_id
+                if wp.startswith('##'):
+                    curr_token += wp[2:]
+                else:
+                    curr_token += wp
+                if unidecode(curr_token).lower() == unidecode(sent_tokens[segment_id]).lower():
+                    segment_id += 1
+                    curr_token = ''
+                    
+            if segment_id != len(sent_tokens):
+                print(f'Sentence {sent_idx} mismatch in number of tokens, skipped!')
+                indices_to_rm.append(sent_idx)
+            else:
+                segments.append(tf.constant(sent_segments, dtype=tf.int64))
+                bert_ids.append(tf.constant(self.get_bert_ids(sent_wordpieces), dtype=tf.int64))
+                bert_len.append(segment_id)
+            sent_idx += 1
+    
+        self.remove_indices(indices_to_rm)
+        
+        return tf.stack(bert_ids), tf.stack(segments), tf.constant(bert_len)
+        
+    
+class DependencyDistance(Dependency):
+    
+    def __init__(self, conll_file, bert_tokenizer):
+        super().__init__(conll_file, bert_tokenizer)
+
+    def target_tensor(self):
+        """Computes the distances between all pairs of words; returns them as a torch tensor.
+
+        Args:
+          observation: a single Observation class for a sentence:
+        Returns:
+          A torch tensor of shape (sentence_length, sentence_length) of distances
+          in the parse tree as specified by the observation annotation.
+        """
+        distances = []
+        print(len(self.relations))
+        for dependency_tree in self.relations:
+            sentence_length = len(dependency_tree)  # All observation fields must be of same length
+            sentence_distances = np.zeros((self.MAX_TOKENS, self.MAX_TOKENS), dtype=np.float32)
+            for i in range(sentence_length):
+                for j in range(i, sentence_length):
+                    i_j_distance = DependencyDistance.distance_between_pairs(dependency_tree, i, j)
+                    sentence_distances[i, j] = i_j_distance
+                    sentence_distances[j, i] = i_j_distance
+                    
+            distances.append(sentence_distances)
+        return tf.stack(distances)
+
+    @staticmethod
+    def distance_between_pairs(dependency_tree, i, j, head_indices=None):
+        '''Computes path distance between a pair of words
+
+        Args:
+          dependency_tree: an Observation namedtuple, with a head_indices field.
+              or None, if head_indies != None
+          i: one of the two words to compute the distance between.
+          j: one of the two words to compute the distance between.
+          head_indices: the head indices (according to a dependency parse) of all
+              words, or None, if observation != None.
+
+        Returns:
+          The integer distance d_path(i,j)
+        '''
+        if i == j:
+            return 0
+        if dependency_tree:
+            head_indices = []
+            for dep, head in dependency_tree:
+                head_indices.append(int(head))
+        i_path = [i + 1]
+        j_path = [j + 1]
+        i_head = i + 1
+        j_head = j + 1
+        while True:
+            if not (i_head == 0 and (i_path == [i + 1] or i_path[-1] == 0)):
+                i_head = head_indices[i_head - 1]
+                i_path.append(i_head)
+            if not (j_head == 0 and (j_path == [j + 1] or j_path[-1] == 0)):
+                j_head = head_indices[j_head - 1]
+                j_path.append(j_head)
+            if i_head in j_path:
+                j_path_length = j_path.index(i_head)
+                i_path_length = len(i_path) - 1
+                break
+            elif j_head in i_path:
+                i_path_length = i_path.index(j_head)
+                j_path_length = len(j_path) - 1
+                break
+            elif i_head == j_head:
+                i_path_length = len(i_path) - 1
+                j_path_length = len(j_path) - 1
+                break
+        total_length = j_path_length + i_path_length
+        return total_length
+    
+    
+class DependencyDepth(Dependency):
+    
+    def __init__(self, conll_file, bert_tokenizer):
+        super().__init__(conll_file, bert_tokenizer)
+        
+    def target_tensor(self):
+        """Computes the depth of each word; returns them as a torch tensor.
+
+        Args:
+          observation: a single Observation class for a sentence:
+        Returns:
+          A torch tensor of shape (sentence_length,) of depths
+          in the parse tree as specified by the observation annotation.
+        """
+        depths = []
+        for dependency_tree in self.relations:
+            sentence_length = len(dependency_tree) #All observation fields must be of same length
+            sentence_depths = np.zeros(self.MAX_TOKENS, dtype=np.float32)
+            for i in range(sentence_length):
+                sentence_depths[i] = DependencyDepth.get_ordering_index(dependency_tree, i)
+            depths.append(sentence_depths)
+        
+        return tf.stack(depths)
+
+    @staticmethod
+    def get_ordering_index(dependency_tree, i, head_indices=None):
+        '''Computes tree depth for a single word in a sentence
+
+        Args:
+          observation: an Observation namedtuple, with a head_indices field.
+              or None, if head_indies != None
+          i: the word in the sentence to compute the depth of
+          head_indices: the head indices (according to a dependency parse) of all
+              words, or None, if observation != None.
+
+        Returns:
+          The integer depth in the tree of word i
+        '''
+        if dependency_tree:
+            head_indices = []
+            for dep, head in dependency_tree:
+                head_indices.append(int(head))
+        length = 0
+        i_head = i+1
+        while True:
+            i_head = head_indices[i_head - 1]
+            if i_head != 0:
+                length += 1
+            else:
+                return length
