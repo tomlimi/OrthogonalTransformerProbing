@@ -23,8 +23,8 @@ class DependencyDataset:
 		
 		def __init__(self, language_data, batch_indices, task, max_token_len=128):
 			self.language = language_data.language
-			self.wordpieces = tf.gather(language_data.wordpieces, batch_indices)[:,:max_token_len]
-			self.segments = tf.gather(language_data.segments, batch_indices)[:,:max_token_len]
+			self.wordpieces = tf.gather(language_data.wordpieces, batch_indices)#[:,:max_token_len]
+			self.segments = tf.gather(language_data.segments, batch_indices)#[:,:max_token_len]
 			self.token_len = tf.gather(language_data.token_len, batch_indices)
 			self.max_token_len = tf.repeat(max_token_len, tf.size(batch_indices))
 			if task.lower() == "distance":
@@ -48,7 +48,7 @@ class DependencyDataset:
 				elif task.lower() == "depth":
 					dependency_data = DependencyDepth(datafile, tokenizer)
 				else:
-					raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
+					raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(task))
 				
 				self._data[language] = DependencyDataset.LanguageData(language, dependency_data)
 				
@@ -72,7 +72,7 @@ class DependencyDataset:
 				for language in self._languages:
 					batch_indices = tf.constant(batch_perm)
 					max_token_len = tf.reduce_max(tf.gather(self._data[language].token_len, batch_indices))
-					batch = DependencyDataset.Batch(self._data[language], batch_indices, max_token_len)
+					batch = DependencyDataset.Batch(self._data[language], batch_indices, self._task, max_token_len)
 					yield batch
 				
 		def evaluate_batches(self, language, size=None):
@@ -84,7 +84,7 @@ class DependencyDataset:
 	
 				batch_indices = tf.constant(batch_perm)
 				max_token_len = tf.reduce_max(tf.gather(self._data[language].token_len, batch_indices))
-				batch = DependencyDataset.Batch(self._data[language], batch_indices, max_token_len)
+				batch = DependencyDataset.Batch(self._data[language], batch_indices,self._task, max_token_len)
 				
 				yield batch
 

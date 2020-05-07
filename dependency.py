@@ -156,7 +156,6 @@ class DependencyDistance(Dependency):
           in the parse tree as specified by the observation annotation.
         """
         distances = []
-        print(len(self.relations))
         for dependency_tree in self.relations:
             sentence_length = len(dependency_tree)  # All observation fields must be of same length
             sentence_distances = np.zeros((self.MAX_TOKENS, self.MAX_TOKENS), dtype=np.float32)
@@ -167,7 +166,7 @@ class DependencyDistance(Dependency):
                     sentence_distances[j, i] = i_j_distance
                     
             distances.append(sentence_distances)
-        return tf.stack(distances)
+        return tf.cast(tf.stack(distances), dtype=tf.float32)
 
     @staticmethod
     def distance_between_pairs(dependency_tree, i, j, head_indices=None):
@@ -238,7 +237,7 @@ class DependencyDepth(Dependency):
                 sentence_depths[i] = DependencyDepth.get_ordering_index(dependency_tree, i)
             depths.append(sentence_depths)
         
-        return tf.stack(depths)
+        return tf.cast(tf.stack(depths), dtype=tf.float32)
 
     @staticmethod
     def get_ordering_index(dependency_tree, i, head_indices=None):
