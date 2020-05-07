@@ -13,7 +13,7 @@ import numpy as np
 
 class BertModel():
 
-    def __init__(self, modelBertDir, language, size="base", casing="uncased", layer_idx=-1):
+    def __init__(self, modelBertDir, layer_idx=-1):
         self.max_seq_length = 128
 
         bert_params = bert.params_from_pretrained_ckpt(modelBertDir)
@@ -41,7 +41,71 @@ class Probe():
 
     @abstractmethod
     def __init__(self, args):
+        self.probe_rank = args.probe_rank
+        self.model_dim = args.bert_dim
+        self.languages = args.train_languages
+
+        self.bert_model = BertModel(args.bert_dir, layer_idx=args.layer_index)
+
+        self.Language_Maps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=True, name='{}_map'.format(lang))
+                              for lang in self.languages}
+
+        self._optimizer = tf.optimizers.Adam()
+
+    @abstractmethod
+    def _forward(self, *args, **kwargs):
         pass
+
+    @abstractmethod
+    def _loss(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def train_factory(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def evaluate_on_batch(self, *args, **kwargs):
+        pass
+
+    def train(self, dep_dataset, args):
+        curr_patience = 0
+        best_weights = None
+        for epoch_idx in range(args.epochs):
+            progressbar = tqdm(enumerate(dep_dataset.train.train_batches(args.batch_size)))
+            for batch_idx, batch in progressbar:
+                batch_loss = self._train_fns[batch.language](batch.wordpieces, batch.segments, batch.token_len,
+                                                             batch.max_token_len, batch.target)
+                progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
+
+            eval_loss = self.evaluate(dep_dataset.dev, 'validation', args)
+
+        # TODO: method to save variables/network
+        # if eval_loss < self.lowest_loss - self.ES_DELTA:
+        #     self.lowest_loss = eval_loss
+        #     best_weights = self.model.get_weights()
+        #     curr_patience = 0
+        # else:
+        #     curr_patience += 1
+        #
+        # if curr_patience > self.ES_PATIENCE:
+        #     self.model.set_weights(best_weights)
+        #     break
+
+    def evaluate(self, data, data_name, args):
+        all_losses = np.zeros((len(self.languages)))
+        for lang_idx, language in enumerate(self.languages):
+            progressbar = tqdm(enumerate(data.evaluate_batches(language, args.batch_size)))
+            for batch_idx, batch in progressbar:
+                batch_loss = self.evaluate_on_batch(batch.wordpieces, batch.segments, batch.token_len,
+                                                    batch.max_token_len, batch.language, batch.target)
+                progressbar.set_description(f"Evaluating on {language}, loss: {batch_loss:.4f}")
+                all_losses[lang_idx] += batch_loss
+
+            all_losses[lang_idx] = all_losses[lang_idx] / (batch_idx + 1.)
+            print(f'Evaluation loss for: {language} : {all_losses[lang_idx]:.4f}')
+
+        return all_losses.mean()
 
 
 class DistanceProbe(Probe):
@@ -53,25 +117,14 @@ class DistanceProbe(Probe):
 
     def __init__(self, args):
         print('Constructing DistanceProbe')
-        super(DistanceProbe, self).__init__(args)
-        self.probe_rank = args.probe_rank
-        self.model_dim = args.bert_dim
-        self.languages = args.train_languages
-        print(self.languages)
+        super().__init__(args)
 
-        self.bert_model = BertModel(args.bert_dir, "multilingual", layer_idx=args.layer_index)
         self.Distance_Probe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim )),
                                           trainable=True, name='distance_probe')
-
-        self.Language_Maps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=True, name='{}_map'.format(lang))
-                              for lang in self.languages}
-
-        self._optimizer = tf.optimizers.Adam()
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
 
-    #def forward_pass_factory(self, language):
     @tf.function
-    def forward(self, wordpieces, segments, max_token_len, language):
+    def _forward(self, wordpieces, segments, max_token_len, language):
         """ Computes all n^2 pairs of distances after projection
         for each sentence in a batch.
 
@@ -92,8 +145,6 @@ class DistanceProbe(Probe):
         squared_diffs = tf.reduce_sum(tf.math.square(diffs), axis=-1) # shape [batch, seq_len, seq_len]
         return squared_diffs
 
-    #return forward
-
     @tf.function
     def _loss(self, predicted_distances, gold_distances, token_lens):
         sentence_loss = tf.reduce_sum(tf.abs(predicted_distances - gold_distances), axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32) ** 2)
@@ -106,7 +157,7 @@ class DistanceProbe(Probe):
         def train_on_batch(wordpieces, segments, token_len, max_token_len, target):
 
             with tf.GradientTape() as tape:
-                predicted_distances = self.forward(wordpieces, segments, max_token_len, language)
+                predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_distances, target, token_len)
 
             variables = [self.Distance_Probe, self.Language_Maps[language]]
@@ -116,103 +167,61 @@ class DistanceProbe(Probe):
             return loss
         return train_on_batch
 
-    def train(self, dep_dataset, args):
-        curr_patience = 0
-        best_weights = None
-        for epoch_idx in range(args.epochs):
-            progressbar = tqdm(enumerate(dep_dataset.train.train_batches(args.batch_size)))
-            for batch_idx, batch in progressbar:
-                batch_loss = self._train_fns[batch.language](batch.wordpieces, batch.segments, batch.token_len,
-                                                             batch.max_token_len, batch.target)
-                # batch_loss = self.train_on_batch(batch.wordpieces, batch.segments, batch.token_len,
-                #                                  batch.max_token_len, batch.language, batch.target)
-                progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
-
-            eval_loss = self.evaluate(dep_dataset.dev, 'validation', args)
-
-    # TODO: method to save variables/network
-    # if eval_loss < self.lowest_loss - self.ES_DELTA:
-    #     self.lowest_loss = eval_loss
-    #     best_weights = self.model.get_weights()
-    #     curr_patience = 0
-    # else:
-    #     curr_patience += 1
-    #
-    # if curr_patience > self.ES_PATIENCE:
-    #     self.model.set_weights(best_weights)
-    #     break
-
     @tf.function(experimental_relax_shapes=True)
     def evaluate_on_batch(self, wordpieces, segments, token_len, max_token_len, language, target):
-        predicted_distances = self.forward(wordpieces, segments, max_token_len, language)
+        predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
         loss = self._loss(predicted_distances, target, token_len)
         return loss
-
-    def evaluate(self, data, data_name, args):
-        all_losses = np.zeros((len(self.languages)))
-        for lang_idx, language in enumerate(self.languages):
-            progressbar = tqdm(enumerate(data.evaluate_batches(language, args.batch_size)))
-            for batch_idx, batch in progressbar:
-                batch_loss = self.evaluate_on_batch(batch.wordpieces, batch.segments, batch.token_len,
-                                                    batch.max_token_len, batch.language, batch.target)
-                progressbar.set_description(f"Evaluating on {language}, loss: {batch_loss:.4f}")
-                all_losses[lang_idx] += batch_loss
-
-            all_losses[lang_idx] = all_losses[lang_idx] / (batch_idx + 1.)
-            print(f'Evaluation loss for: {language} : {all_losses[lang_idx]:.4f}')
-
-        return all_losses.mean()
 
 
 class DepthProbe(Probe):
     """ Computes squared L2 norm of words after projection by a matrix."""
 
     def __init__(self, args):
-        def __init__(self, args):
-            print('Constructing DistanceProbe')
-            super(DistanceProbe, self).__init__(args)
-            self.probe_rank = args.probe_rank
-            self.model_dim = args.bert_dim
-            self.languages = args.train_languages
+        print('Constructing DistanceProbe')
+        super().__init__(args)
+        self.Depth_Probe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
+                                          trainable=True, name='depth_probe')
+        self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
 
-            self.bert_model = BertModel(args.bert_dir, "multilingual", layer_idx=args.layer_index)
-            self.Distance_Probe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
-                                              trainable=True, name='depth_probe')
+    @tf.function
+    def _forward(self, wordpieces, segments, max_token_len, language):
+        """ Computes all n depths after projection for each sentence in a batch.
+        Computes (Bh_i)^T(Bh_i) for all i
+        """
+        embeddings = self.bert_model(wordpieces)
+        embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
+                               (embeddings, segments, max_token_len), dtype=tf.float32)
+        #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
+        embeddings = embeddings @ self.Language_Maps[language]
+        embeddings = embeddings @  self.Depth_Probe
 
-            self.Language_Maps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=True, name='{}_map'.format(lang))
-                                  for lang in self.languages}
-
-            self._optimizer = tf.optimizers.Adam()
-
-# def __init__(self, args):
-#     print('Constructing OneWordPSDProbe')
-#     super(OneWordPSDProbe, self).__init__()
-#     self.args = args
-#     self.probe_rank = args['probe']['maximum_rank']
-#     self.model_dim = args['model']['hidden_dim']
-#     self.proj = tf.nn.Parameter(data=torch.zeros(self.model_dim, self.probe_rank))
-#     tf.nn.init.uniform_(self.proj, -0.05, 0.05)
-#     self.to(args['device'])
-#
-# def forward(self, batch):
-#     """ Computes all n depths after projection
-#     for each sentence in a batch.
-#
-#     Computes (Bh_i)^T(Bh_i) for all i
-#
-#     Args:
-#       batch: a batch of word representations of the shape
-#         (batch_size, max_seq_len, representation_dim)
-#     Returns:
-#       A tensor of depths of shape (batch_size, max_seq_len)
-#     """
-#     transformed = torch.matmul(batch, self.proj)
-#     batchlen, seqlen, rank = transformed.size()
-#     norms = torch.bmm(transformed.view(batchlen * seqlen, 1, rank),
-#                       transformed.view(batchlen * seqlen, rank, 1))
-#     norms = norms.view(batchlen, seqlen)
-#     return norms
+        norms = tf.norm(embeddings, ord='euclidean', axis=2)
+        return norms
 
 
+    @tf.function
+    def _loss(self, predicted_depths, gold_depths, token_lens):
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths), axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32))
+        return tf.reduce_mean(sentence_loss)
 
+    def train_factory(self,language):
+        @tf.function(experimental_relax_shapes=True)
+        def train_on_batch(wordpieces, segments, token_len, max_token_len, target):
 
+            with tf.GradientTape() as tape:
+                predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
+                loss = self._loss(predicted_depths, target, token_len)
+
+            variables = [self.Depth_Probe, self.Language_Maps[language]]
+            gradients = tape.gradient(loss, variables)
+            self._optimizer.apply_gradients(zip(gradients, variables))
+
+            return loss
+        return train_on_batch
+
+    @tf.function(experimental_relax_shapes=True)
+    def evaluate_on_batch(self, wordpieces, segments, token_len, max_token_len, language, target):
+        predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
+        loss = self._loss(predicted_depths, target, token_len)
+        return loss
