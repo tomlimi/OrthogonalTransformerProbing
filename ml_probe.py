@@ -42,7 +42,7 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 	
 	assert set(args.train_languages) >=  set(args.dev_languages),\
-		"Currently, evaluation is possible only for languages on which probes were treined"
+		"Currently, evaluation is possible only for languages on which probes were trained"
 	assert len(args.train_languages) == len(args.train_data), \
 		"Number of train data files and languages needs to be the same"
 	assert len(args.train_languages) == len(args.train_data), \
