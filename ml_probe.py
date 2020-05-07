@@ -4,17 +4,7 @@ import argparse
 from datasets import DependencyDataset
 from network import DistanceProbe, DepthProbe
 
-LANGUAGE_ENGLISH = "english"
-LANGUAGE_CHINESE = "chinese"
-LANGUAGE_MULTILINGUAL = "multilingual"
-
-SIZE_BASE = "base"
-SIZE_LARGE = "large"
-
-CASING_CASED = "cased"
-CASING_UNCASED = "uncased"
-
-BERT_MODEL_DIR = "/net/projects/bert/models/"
+import constants
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
@@ -34,9 +24,9 @@ if __name__ == "__main__":
 	# Specify Bert Model
 	parser.add_argument("--bert-dir", default="/net/projects/bert/models/", type=str,
 	                    help="Directory where BERT resources are storred (vocab, trained checkpoints)")
-	parser.add_argument("--casing", default=CASING_UNCASED, help="Bert model casing")
-	parser.add_argument("--language", default=LANGUAGE_MULTILINGUAL, help="Bert model language")
-	parser.add_argument("--size", default=SIZE_BASE, help="Bert model size")
+	parser.add_argument("--casing", default=constants.CASING_UNCASED, help="Bert model casing")
+	parser.add_argument("--language", default=constants.LANGUAGE_MULTILINGUAL, help="Bert model language")
+	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
 	
 	# parser.add_argument("--threads", default=4, type=int, help="Threads to use")
 	args = parser.parse_args()

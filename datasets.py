@@ -5,6 +5,8 @@ import tensorflow as tf
 import numpy as np
 import bert
 
+import constants
+
 from dependency import DependencyDistance, DependencyDepth
 
 
@@ -21,10 +23,10 @@ class DependencyDataset:
 			
 	class Batch:
 		
-		def __init__(self, language_data, batch_indices, task, max_token_len=128):
+		def __init__(self, language_data, batch_indices, task, max_token_len=constants.MAX_TOKENS):
 			self.language = language_data.language
-			self.wordpieces = tf.gather(language_data.wordpieces, batch_indices)#[:,:max_token_len]
-			self.segments = tf.gather(language_data.segments, batch_indices)#[:,:max_token_len]
+			self.wordpieces = tf.gather(language_data.wordpieces, batch_indices)
+			self.segments = tf.gather(language_data.segments, batch_indices)
 			self.token_len = tf.gather(language_data.token_len, batch_indices)
 			self.max_token_len = tf.repeat(max_token_len, tf.size(batch_indices))
 			if task.lower() == "distance":

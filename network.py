@@ -1,30 +1,28 @@
 """Classes for training and running inference on probes."""
 import os
-import sys
 
 import tensorflow as tf
 import bert
-import tensorflow_hub as hub
 from abc import abstractmethod
 
 from tqdm import tqdm
 import numpy as np
 
+import constants
 
 class BertModel():
 
     def __init__(self, modelBertDir, layer_idx=-1):
-        self.max_seq_length = 128
 
         bert_params = bert.params_from_pretrained_ckpt(modelBertDir)
         self.bert_layer = bert.BertModelLayer.from_params(bert_params, name="bert", out_layer_ndxs=[layer_idx])
         self.bert_layer.apply_adapter_freeze()
 
         self.model = tf.keras.Sequential([
-            tf.keras.layers.Input(shape=(self.max_seq_length,), dtype='int32', name='input_ids'),
+            tf.keras.layers.Input(shape=(constants.MAX_WORDPIECES,), dtype='int32', name='input_ids'),
             self.bert_layer])
 
-        self.model.build(input_shape=(None, self.max_seq_length))
+        self.model.build(input_shape=(None, constants.MAX_WORDPIECES))
 
         checkpointName = os.path.join(modelBertDir, "bert_model.ckpt")
         bert.load_stock_weights(self.bert_layer, checkpointName)

@@ -4,17 +4,10 @@ import tensorflow as tf
 
 from unidecode import unidecode
 
+import constants
+
 
 class Dependency():
-    
-    MAX_TOKENS = 100
-    MAX_WORDPIECES = 128
-    
-    CONLLU_ID = 0
-    CONLLU_ORTH = 1
-    CONLLU_POS = 3
-    CONLLU_HEAD = 6
-    CONLLU_LABEL = 7
 
     def __init__(self, conll_file, bert_tokenizer):
 
@@ -60,20 +53,20 @@ class Dependency():
                     continue
                 else:
                     fields = line.strip().split('\t')
-                    if fields[self.CONLLU_ID].isdigit():
-                        head_id = int(fields[self.CONLLU_HEAD])
-                        dep_id = int(fields[self.CONLLU_ID])
+                    if fields[constants.CONLLU_ID].isdigit():
+                        head_id = int(fields[constants.CONLLU_HEAD])
+                        dep_id = int(fields[constants.CONLLU_ID])
                         sentence_relations.append((dep_id, head_id))
 
                         if head_id == 0:
-                            self.roots.append(int(fields[self.CONLLU_ID]))
+                            self.roots.append(int(fields[constants.CONLLU_ID]))
 
-                        sentence_tokens.append(fields[self.CONLLU_ORTH])
+                        sentence_tokens.append(fields[constants.CONLLU_ORTH])
 
     def get_bert_ids(self, wordpieces):
         """Token ids from Tokenizer vocab"""
         token_ids = self.tokenizer.convert_tokens_to_ids(wordpieces)
-        input_ids = token_ids + [0] * (self.MAX_WORDPIECES - len(wordpieces))
+        input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
         return input_ids
 
     def training_examples(self):
@@ -93,11 +86,11 @@ class Dependency():
         for idx, sent_tokens in enumerate(self.tokens[:]):
             sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens))) + ["[SEP]"]
             wordpieces.append(sent_wordpieces)
-            if len(sent_tokens) >= self.MAX_TOKENS:
+            if len(sent_tokens) >= constants.MAX_TOKENS:
                 print(f"Sentence {idx} too many tokens in file {self.conllu_name}, skipping.")
                 indices_to_rm.append(idx)
                 number_examples -= 1
-            elif len(sent_wordpieces) >= self.MAX_WORDPIECES:
+            elif len(sent_wordpieces) >= constants.MAX_WORDPIECES:
                 print(f"Sentence {idx} too many wordpieces in file {self.conllu_name}, skipping.")
                 indices_to_rm.append(idx)
                 number_examples -= 1
@@ -111,7 +104,7 @@ class Dependency():
                 sent_idx += 1
                 continue
             
-            sent_segments = np.zeros((self.MAX_WORDPIECES,), dtype=np.int64) - 1
+            sent_segments = np.zeros((constants.MAX_WORDPIECES,), dtype=np.int64) - 1
             segment_id = 0
             curr_token = ''
             for wp_id, wp in enumerate(sent_wordpieces):
@@ -158,7 +151,7 @@ class DependencyDistance(Dependency):
         distances = []
         for dependency_tree in self.relations:
             sentence_length = len(dependency_tree)  # All observation fields must be of same length
-            sentence_distances = np.zeros((self.MAX_TOKENS, self.MAX_TOKENS), dtype=np.float32)
+            sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
             for i in range(sentence_length):
                 for j in range(i, sentence_length):
                     i_j_distance = DependencyDistance.distance_between_pairs(dependency_tree, i, j)
@@ -232,7 +225,7 @@ class DependencyDepth(Dependency):
         depths = []
         for dependency_tree in self.relations:
             sentence_length = len(dependency_tree) #All observation fields must be of same length
-            sentence_depths = np.zeros(self.MAX_TOKENS, dtype=np.float32)
+            sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
             for i in range(sentence_length):
                 sentence_depths[i] = DependencyDepth.get_ordering_index(dependency_tree, i)
             depths.append(sentence_depths)
