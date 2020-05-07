@@ -162,7 +162,7 @@ class DistanceProbe(Probe):
 
             variables = [self.Distance_Probe, self.Language_Maps[language]]
             gradients = tape.gradient(loss, variables)
-            self._optimizer[language].apply_gradients(zip(gradients, variables))
+            self._optimizer.apply_gradients(zip(gradients, variables))
 
             return loss
         return train_on_batch
@@ -199,10 +199,9 @@ class DepthProbe(Probe):
         norms = tf.norm(embeddings, ord='euclidean', axis=2)
         return norms
 
-
     @tf.function
     def _loss(self, predicted_depths, gold_depths, token_lens):
-        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths), axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32))
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths), axis=1) / (tf.cast(token_lens, dtype=tf.float32))
         return tf.reduce_mean(sentence_loss)
 
     def train_factory(self,language):
