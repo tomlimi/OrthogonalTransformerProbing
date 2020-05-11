@@ -23,7 +23,7 @@ if __name__ == "__main__":
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
 	# Train arguments
-	parser.add_argument("--batch_size", default=20, type=int, help="Batch size")
+	parser.add_argument("--batch-size", default=20, type=int, help="Batch size")
 	parser.add_argument("--epochs", default=40, type=int, help="Maximal number of training epochs")
 	parser.add_argument("--learning-rate", default=0.001, type=float, help="Initial learning rate")
 	# Specify Bert Model
@@ -34,6 +34,7 @@ if __name__ == "__main__":
 	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
 	# Reporting options
 	parser.add_argument("--report", "-r", action="store_true", help="Whether to report the restults")
+	parser.add_argument("--no-training", "-n", action="store_true", help="Do not conduct probe training, load saved weights and evaluate")
 	
 	
 	# parser.add_argument("--threads", default=4, type=int, help="Threads to use")
@@ -78,8 +79,10 @@ if __name__ == "__main__":
 	else:
 		raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
 	
-	prober.train(dep_dataset,args)
-	
+	if not args.no_training:
+		prober.train(dep_dataset,args)
+	else:
+		prober.load(args)
 	if args.report:
 		if args.task.lower() == 'distance':
 			test_reporter = DistanceReporter(prober, dep_dataset.test, 'test')

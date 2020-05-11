@@ -113,8 +113,8 @@ class Probe():
         return all_losses.mean()
         
     def load(self, args):
-        status = self.ckpt.restore(tf.train.latest_checkpoint(os.path.joint(args.out_dir, 'params')))
-        status.assert_consumed()
+        status = self.ckpt.restore(tf.train.latest_checkpoint(os.path.join(args.out_dir, 'params')))
+        #status.assert_consumed()
 
 
 class DistanceProbe(Probe):
