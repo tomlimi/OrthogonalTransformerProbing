@@ -45,7 +45,9 @@ class Probe():
 
         self.bert_model = BertModel(args.bert_dir, layer_idx=args.layer_index)
 
-        self.LanguageMaps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=True, name='{}_map'.format(lang))
+        self.ml_probe = args.ml_probe
+
+        self.LanguageMaps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=self.ml_probe, name='{}_map'.format(lang))
                              for lang in self.languages}
 
         self._lr = args.learning_rate
@@ -161,7 +163,7 @@ class DistanceProbe(Probe):
     @tf.function
     def _loss(self, predicted_distances, gold_distances, token_lens):
         sentence_loss = tf.reduce_sum(tf.abs(predicted_distances - gold_distances), axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32) ** 2)
-        return tf.reduce_mean(sentence_loss)
+        return tf.reduce_sum(sentence_loss)
 
     def train_factory(self,language):
         # separate train function is needed to avoid variable creation on non-first call
@@ -173,7 +175,10 @@ class DistanceProbe(Probe):
                 predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_distances, target, token_len)
 
-            variables = [self.DistanceProbe, self.LanguageMaps[language]]
+            if self.ml_probe:
+                variables = [self.DistanceProbe, self.LanguageMaps[language]]
+            else:
+                variables = [self.DistanceProbe]
             gradients = tape.gradient(loss, variables)
             self._optimizer.apply_gradients(zip(gradients, variables))
 
@@ -218,13 +223,13 @@ class DepthProbe(Probe):
         embeddings = embeddings @ self.LanguageMaps[language]
         embeddings = embeddings @ self.DepthProbe
 
-        norms = tf.norm(embeddings, ord='euclidean', axis=2)
-        return norms
+        squared_norms = tf.norm(embeddings, ord='euclidean', axis=2) ** 2
+        return squared_norms
 
     @tf.function
     def _loss(self, predicted_depths, gold_depths, token_lens):
         sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths), axis=1) / (tf.cast(token_lens, dtype=tf.float32))
-        return tf.reduce_mean(sentence_loss)
+        return tf.reduce_sum(sentence_loss)
 
     def train_factory(self,language):
         @tf.function(experimental_relax_shapes=True)
@@ -234,7 +239,10 @@ class DepthProbe(Probe):
                 predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_depths, target, token_len)
 
-            variables = [self.DepthProbe, self.LanguageMaps[language]]
+            if self.ml_probe:
+                variables = [self.DepthProbe, self.LanguageMaps[language]]
+            else:
+                variables = [self.DepthProbe]
             gradients = tape.gradient(loss, variables)
             self._optimizer.apply_gradients(zip(gradients, variables))
 

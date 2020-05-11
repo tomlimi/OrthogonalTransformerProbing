@@ -35,10 +35,12 @@ if __name__ == "__main__":
 	# Reporting options
 	parser.add_argument("--report", "-r", action="store_true", help="Whether to report the restults")
 	parser.add_argument("--no-training", "-n", action="store_true", help="Do not conduct probe training, load saved weights and evaluate")
-	
+	parser.add_argument("--no-ml-probe", action="store_false", help="Resign from ml probe (store false)")
 	
 	# parser.add_argument("--threads", default=4, type=int, help="Threads to use")
 	args = parser.parse_args()
+	# compatibility
+	args.ml_probe = args.no_ml_probe
 	
 	experiment_name = f"task:{args.task.lower()}-layer:{args.layer_index}-trainl:{'_'.join(args.train_languages)}"
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
