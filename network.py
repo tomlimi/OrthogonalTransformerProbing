@@ -34,10 +34,10 @@ class BertModel():
 
 class Probe():
 
-    ES_PATIENCE = 5
+    ONPLATEU_DECAY = 0.1
+    ES_PATIENCE = 4
     ES_DELTA = 1e-4
 
-    @abstractmethod
     def __init__(self, args):
         self.probe_rank = args.probe_rank
         self.model_dim = args.bert_dim
@@ -48,7 +48,8 @@ class Probe():
         self.LanguageMaps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=True, name='{}_map'.format(lang))
                              for lang in self.languages}
 
-        self._optimizer = tf.optimizers.Adam()
+        self._lr = args.learning_rate
+        self._optimizer = tf.optimizers.Adam(lr=self._lr)
 
         self.optimal_loss = np.inf
 
@@ -70,6 +71,7 @@ class Probe():
 
     def train(self, dep_dataset, args):
         curr_patience = 0
+        optimizer_reseted = False
         for epoch_idx in range(args.epochs):
             progressbar = tqdm(enumerate(dep_dataset.train.train_batches(args.batch_size)))
             for batch_idx, batch in progressbar:
@@ -82,10 +84,15 @@ class Probe():
             if eval_loss < self.optimal_loss - self.ES_DELTA:
                 self.optimal_loss = eval_loss
                 self.checkpoint_manager.save()
+                optimizer_reseted = False
                 curr_patience = 0
             else:
                 curr_patience += 1
 
+            if curr_patience > 0 and not optimizer_reseted:
+                self._lr *= self.ONPLATEU_DECAY
+                self._optimizer = tf.optimizers.Adam(lr=self._lr)
+                optimizer_reseted = True
             if curr_patience > self.ES_PATIENCE:
                 self.load(args)
                 break

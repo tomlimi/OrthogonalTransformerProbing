@@ -23,8 +23,9 @@ if __name__ == "__main__":
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
 	# Train arguments
-	parser.add_argument("--batch_size", default=16, type=int, help="Batch size")
-	parser.add_argument("--epochs", default=10, type=int, help="Maximal number of training epochs")
+	parser.add_argument("--batch_size", default=20, type=int, help="Batch size")
+	parser.add_argument("--epochs", default=40, type=int, help="Maximal number of training epochs")
+	parser.add_argument("--learning-rate", default=0.001, type=float, help="Initial learning rate")
 	# Specify Bert Model
 	parser.add_argument("--bert-dir", default="/net/projects/bert/models/", type=str,
 	                    help="Directory where BERT resources are storred (vocab, trained checkpoints)")
