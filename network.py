@@ -45,10 +45,12 @@ class Probe():
 
         self.bert_model = BertModel(args.bert_dir, layer_idx=args.layer_index)
 
-        self.Language_Maps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=True, name='{}_map'.format(lang))
-                              for lang in self.languages}
+        self.LanguageMaps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=True, name='{}_map'.format(lang))
+                             for lang in self.languages}
 
         self._optimizer = tf.optimizers.Adam()
+
+        self.optimal_loss = np.inf
 
     @abstractmethod
     def _forward(self, *args, **kwargs):
@@ -68,7 +70,6 @@ class Probe():
 
     def train(self, dep_dataset, args):
         curr_patience = 0
-        best_weights = None
         for epoch_idx in range(args.epochs):
             progressbar = tqdm(enumerate(dep_dataset.train.train_batches(args.batch_size)))
             for batch_idx, batch in progressbar:
@@ -77,18 +78,17 @@ class Probe():
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
             eval_loss = self.evaluate(dep_dataset.dev, 'validation', args)
+            # TODO: method to save variables/network
+            if eval_loss < self.optimal_loss - self.ES_DELTA:
+                self.optimal_loss = eval_loss
+                self.checkpoint_manager.save()
+                curr_patience = 0
+            else:
+                curr_patience += 1
 
-        # TODO: method to save variables/network
-        # if eval_loss < self.lowest_loss - self.ES_DELTA:
-        #     self.lowest_loss = eval_loss
-        #     best_weights = self.model.get_weights()
-        #     curr_patience = 0
-        # else:
-        #     curr_patience += 1
-        #
-        # if curr_patience > self.ES_PATIENCE:
-        #     self.model.set_weights(best_weights)
-        #     break
+            if curr_patience > self.ES_PATIENCE:
+                self.load(args)
+                break
 
     def evaluate(self, data, data_name, args):
         all_losses = np.zeros((len(self.languages)))
@@ -104,6 +104,10 @@ class Probe():
             print(f'Evaluation loss for: {language} : {all_losses[lang_idx]:.4f}')
 
         return all_losses.mean()
+        
+    def load(self, args):
+        status = self.ckpt.restore(tf.train.latest_checkpoint(os.path.joint(args.out_dir, 'params')))
+        status.assert_consumed()
 
 
 class DistanceProbe(Probe):
@@ -117,9 +121,13 @@ class DistanceProbe(Probe):
         print('Constructing DistanceProbe')
         super().__init__(args)
 
-        self.Distance_Probe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim )),
-                                          trainable=True, name='distance_probe')
+        self.DistanceProbe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
+                                         trainable=True, name='distance_probe')
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
+        
+        #Checkpoint managment:
+        self.ckpt = tf.train.Checkpoint(optimizer=self._optimizer, distance_probe=self.DistanceProbe, **self.LanguageMaps)
+        self.checkpoint_manager = tf.train.CheckpointManager(self.ckpt, os.path.join(args.out_dir, 'params'), max_to_keep=1)
 
     @tf.function
     def _forward(self, wordpieces, segments, max_token_len, language):
@@ -135,8 +143,8 @@ class DistanceProbe(Probe):
         embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                (embeddings, segments, max_token_len), dtype=tf.float32)
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
-        embeddings = embeddings @ self.Language_Maps[language]
-        embeddings = embeddings @  self.Distance_Probe
+        embeddings = embeddings @ self.LanguageMaps[language]
+        embeddings = embeddings @ self.DistanceProbe
         embeddings = tf.expand_dims(embeddings, 1)  # shape [batch, 1, seq_len, emb_dim]
         transposed_embeddings = tf.transpose(embeddings, perm=(0, 2, 1, 3))  # shape [batch, seq_len, 1, emb_dim]
         diffs = embeddings - transposed_embeddings  # shape [batch, seq_len, seq_len, emb_dim]
@@ -158,7 +166,7 @@ class DistanceProbe(Probe):
                 predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_distances, target, token_len)
 
-            variables = [self.Distance_Probe, self.Language_Maps[language]]
+            variables = [self.DistanceProbe, self.LanguageMaps[language]]
             gradients = tape.gradient(loss, variables)
             self._optimizer.apply_gradients(zip(gradients, variables))
 
@@ -183,9 +191,13 @@ class DepthProbe(Probe):
     def __init__(self, args):
         print('Constructing DistanceProbe')
         super().__init__(args)
-        self.Depth_Probe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
-                                          trainable=True, name='depth_probe')
+        self.DepthProbe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
+                                      trainable=True, name='depth_probe')
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
+
+        # Checkpoint managment:
+        self.ckpt = tf.train.Checkpoint(optimizer=self._optimizer, depth_probe=self.DepthProbe, **self.LanguageMaps)
+        self.checkpoint_manager = tf.train.CheckpointManager(self.ckpt, os.path.join(args.out_dir, 'params'), max_to_keep=1)
 
     @tf.function
     def _forward(self, wordpieces, segments, max_token_len, language):
@@ -196,8 +208,8 @@ class DepthProbe(Probe):
         embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                (embeddings, segments, max_token_len), dtype=tf.float32)
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
-        embeddings = embeddings @ self.Language_Maps[language]
-        embeddings = embeddings @  self.Depth_Probe
+        embeddings = embeddings @ self.LanguageMaps[language]
+        embeddings = embeddings @ self.DepthProbe
 
         norms = tf.norm(embeddings, ord='euclidean', axis=2)
         return norms
@@ -215,7 +227,7 @@ class DepthProbe(Probe):
                 predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_depths, target, token_len)
 
-            variables = [self.Depth_Probe, self.Language_Maps[language]]
+            variables = [self.DepthProbe, self.LanguageMaps[language]]
             gradients = tape.gradient(loss, variables)
             self._optimizer.apply_gradients(zip(gradients, variables))
 

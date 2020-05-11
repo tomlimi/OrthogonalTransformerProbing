@@ -9,7 +9,8 @@ import constants
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
-	
+	#
+	parser.add_argument("parent_dir", type=str, default="/home/limisiewicz/PycharmProjects/MultilingualTransformerProbing/experiments", help="Parent experiment directory")
 	parser.add_argument("--train-data", nargs='*', type=str, required=True, help="Conllu files for training")
 	parser.add_argument("--train-languages", nargs='*', type=str, required=True, help="Languages of trianing conllu files")
 	parser.add_argument("--dev-data", nargs='*', type=str, required=True, help="Conllu files for validation")
@@ -20,7 +21,7 @@ if __name__ == "__main__":
 	parser.add_argument("--task", default="distance", type=str, help="Probing task (distance or depth)")
 	parser.add_argument("--bert-dim", default=768, type=int, help="Dimensionality of BERT embeddings")
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
-	parser.add_argument("--layer_index", default=6, type=int, help="Index of BERT's layer to probe")
+	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
 	# Train arguments
 	parser.add_argument("--batch_size", default=16, type=int, help="Batch size")
 	parser.add_argument("--epochs", default=10, type=int, help="Maximal number of training epochs")
@@ -36,6 +37,9 @@ if __name__ == "__main__":
 	
 	# parser.add_argument("--threads", default=4, type=int, help="Threads to use")
 	args = parser.parse_args()
+	
+	experiment_name = f"task:{args.task.lower()}-layer:{args.layer_index}-trainl:{'_'.join(args.train_languages)}"
+	args.out_dir = os.path.join(args.parent_dir,experiment_name)
 	
 	assert set(args.train_languages) >= set(args.dev_languages),\
 		"Currently, evaluation is possible only for languages on which probes were trained"
@@ -77,10 +81,11 @@ if __name__ == "__main__":
 	
 	if args.report:
 		if args.task.lower() == 'distance':
-			reporter = DistanceReporter(prober)
+			test_reporter = DistanceReporter(prober, dep_dataset.test, 'test')
 		elif args.task.lower() == 'depth':
-			reporter = DepthReporter(prober)
+			test_reporter = DepthReporter(prober, dep_dataset.test, 'test')
 		else:
 			raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
 
-		reporter.predict(dep_dataset.test, args)
+		test_reporter.predict(args)
+		test_reporter.write(args)
