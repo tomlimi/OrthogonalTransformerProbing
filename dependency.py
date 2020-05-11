@@ -25,6 +25,10 @@ class Dependency():
         return [{dep: parent for dep, parent in sent_relation} for sent_relation in self.relations]
     
     @property
+    def unlabeled_unordered_relations(self):
+        return [{frozenset((dep, parent)) for dep, parent in sent_relation} for sent_relation in self.relations]
+    
+    @property
     def word_count(self):
         return [len(sent_relation) for sent_relation in self.relations]
     

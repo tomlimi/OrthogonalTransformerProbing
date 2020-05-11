@@ -19,7 +19,12 @@ class DependencyDataset:
 			self.wordpieces, self.segments, self.token_len = dependency_data.training_examples()
 			self.target = dependency_data.target_tensor()
 			
-			self.size = self.wordpieces.shape[0]
+			self.roots = dependency_data.roots
+			self.uu_relations = dependency_data.unlabeled_unordered_relations
+			
+		@property
+		def size(self):
+			return self.wordpieces.shape[0]
 			
 	class Batch:
 		
@@ -35,7 +40,10 @@ class DependencyDataset:
 				self.target = tf.gather(language_data.target, batch_indices)[:,:max_token_len]
 			else:
 				raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(task))
-
+			
+			self.roots = [np.array(language_data.roots[exmpl_idx]) for exmpl_idx in batch_indices]
+			self.uu_relations = [language_data.uu_relations[exmpl_idx] for exmpl_idx in batch_indices]
+			
 	class Dataset:
 		def __init__(self, datafiles, languages, task, tokenizer, shuffle_batches=True, seed=42):
 			
@@ -62,6 +70,7 @@ class DependencyDataset:
 		def data(self):
 			return self._data
 	
+		@property
 		def size(self):
 			return self._size
 	

@@ -170,6 +170,11 @@ class DistanceProbe(Probe):
         predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
         loss = self._loss(predicted_distances, target, token_len)
         return loss
+    
+    @tf.function(experimental_relax_shapes=True)
+    def predict_on_batch(self,wordpieces, segments, token_len, max_token_len, language):
+        predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
+        return predicted_distances
 
 
 class DepthProbe(Probe):
@@ -222,3 +227,8 @@ class DepthProbe(Probe):
         predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
         loss = self._loss(predicted_depths, target, token_len)
         return loss
+    
+    @tf.function(experimental_relax_shapes=True)
+    def predict_on_batch(self, wordpieces, segments, token_len, max_token_len, language):
+        predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
+        return predicted_depths

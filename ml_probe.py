@@ -3,6 +3,7 @@ import argparse
 
 from datasets import DependencyDataset
 from network import DistanceProbe, DepthProbe
+from reporter import DistanceReporter, DepthReporter
 
 import constants
 
@@ -13,6 +14,8 @@ if __name__ == "__main__":
 	parser.add_argument("--train-languages", nargs='*', type=str, required=True, help="Languages of trianing conllu files")
 	parser.add_argument("--dev-data", nargs='*', type=str, required=True, help="Conllu files for validation")
 	parser.add_argument("--dev-languages", nargs='*', type=str, required=True, help="Languages of validation conllu files")
+	parser.add_argument("--test-data", nargs='*', type=str, required=True, help="Conllu files for validation")
+	parser.add_argument("--test-languages", nargs='*', type=str, required=True, help="Languages of validation conllu files")
 	# Probe arguments
 	parser.add_argument("--task", default="distance", type=str, help="Probing task (distance or depth)")
 	parser.add_argument("--bert-dim", default=768, type=int, help="Dimensionality of BERT embeddings")
@@ -27,24 +30,31 @@ if __name__ == "__main__":
 	parser.add_argument("--casing", default=constants.CASING_UNCASED, help="Bert model casing")
 	parser.add_argument("--language", default=constants.LANGUAGE_MULTILINGUAL, help="Bert model language")
 	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
+	# Reporting options
+	parser.add_argument("--report", "-r", action="store_true", help="Whether to report the restults")
+	
 	
 	# parser.add_argument("--threads", default=4, type=int, help="Threads to use")
 	args = parser.parse_args()
 	
-	assert set(args.train_languages) >=  set(args.dev_languages),\
+	assert set(args.train_languages) >= set(args.dev_languages),\
+		"Currently, evaluation is possible only for languages on which probes were trained"
+	assert set(args.train_languages) >= set(args.test_languages),\
 		"Currently, evaluation is possible only for languages on which probes were trained"
 	assert len(args.train_languages) == len(args.train_data), \
 		"Number of train data files and languages needs to be the same"
-	assert len(args.train_languages) == len(args.train_data), \
+	assert len(args.dev_languages) == len(args.dev_data), \
 		"Number of development data files and languages needs to be the same"
+	assert len(args.test_languages) == len(args.test_data), \
+		"Number of test data files and languages needs to be the same"
 	
 	dataset_files = {'train': args.train_data,
-	                 'dev': args.dev_data}
-	                 #'test': []}
+	                 'dev': args.dev_data,
+	                 'test': args.test_data}
 	
 	dataset_languages = {'train': args.train_languages,
-	                     'dev': args.dev_languages}
-	                     #'test': []}
+	                     'dev': args.dev_languages,
+	                     'test': args.test_languages}
 	
 	args.bert_dir = os.path.join(args.bert_dir, "{}-{}-{}".format(args.language, args.size, args.casing))
 	if not os.path.exists(args.bert_dir):
@@ -64,3 +74,13 @@ if __name__ == "__main__":
 		raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
 	
 	prober.train(dep_dataset,args)
+	
+	if args.report:
+		if args.task.lower() == 'distance':
+			reporter = DistanceReporter(prober)
+		elif args.task.lower() == 'depth':
+			reporter = DepthReporter(prober)
+		else:
+			raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
+
+		reporter.predict(dep_dataset.test, args)
