@@ -47,7 +47,8 @@ class Probe():
 
         self.ml_probe = args.ml_probe
 
-        self.LanguageMaps = {lang: tf.Variable(tf.eye(self.model_dim), trainable=self.ml_probe, name='{}_map'.format(lang))
+        self.LanguageMaps = {lang: tf.Variable(tf.initializers.Identity(gain=1.0)((self.model_dim, self.model_dim)),
+                                               trainable=self.ml_probe, name='{}_map'.format(lang))
                              for lang in self.languages}
 
         self._lr = args.learning_rate
@@ -67,9 +68,6 @@ class Probe():
     def train_factory(self, *args, **kwargs):
         pass
 
-    @abstractmethod
-    def evaluate_on_batch(self, *args, **kwargs):
-        pass
 
     def train(self, dep_dataset, args):
         curr_patience = 0
@@ -82,7 +80,6 @@ class Probe():
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
             eval_loss = self.evaluate(dep_dataset.dev, 'validation', args)
-            # TODO: method to save variables/network
             if eval_loss < self.optimal_loss - self.ES_DELTA:
                 self.optimal_loss = eval_loss
                 self.checkpoint_manager.save()
@@ -115,7 +112,7 @@ class Probe():
         return all_losses.mean()
         
     def load(self, args):
-        status = self.ckpt.restore(tf.train.latest_checkpoint(os.path.join(args.out_dir, 'params')))
+        self.checkpoint_manager.restore_or_initialize()
         #status.assert_consumed()
 
 
@@ -131,7 +128,7 @@ class DistanceProbe(Probe):
         super().__init__(args)
 
         self.DistanceProbe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
-                                         trainable=True, name='distance_probe')
+                                         trainable=True, name='distance_probe', dtype=tf.float32)
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
         
         #Checkpoint managment:
@@ -152,7 +149,8 @@ class DistanceProbe(Probe):
         embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                (embeddings, segments, max_token_len), dtype=tf.float32)
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
-        embeddings = embeddings @ self.LanguageMaps[language]
+        if self.ml_probe:
+            embeddings = embeddings @ self.LanguageMaps[language]
         embeddings = embeddings @ self.DistanceProbe
         embeddings = tf.expand_dims(embeddings, 1)  # shape [batch, 1, seq_len, emb_dim]
         transposed_embeddings = tf.transpose(embeddings, perm=(0, 2, 1, 3))  # shape [batch, seq_len, 1, emb_dim]
@@ -192,7 +190,7 @@ class DistanceProbe(Probe):
         return loss
     
     @tf.function(experimental_relax_shapes=True)
-    def predict_on_batch(self,wordpieces, segments, token_len, max_token_len, language):
+    def predict_on_batch(self, wordpieces, segments, token_len, max_token_len, language):
         predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
         return predicted_distances
 
@@ -204,7 +202,7 @@ class DepthProbe(Probe):
         print('Constructing DistanceProbe')
         super().__init__(args)
         self.DepthProbe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
-                                      trainable=True, name='depth_probe')
+                                      trainable=True, name='depth_probe', dtype=tf.float32)
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
 
         # Checkpoint managment:
@@ -220,7 +218,8 @@ class DepthProbe(Probe):
         embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                (embeddings, segments, max_token_len), dtype=tf.float32)
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
-        embeddings = embeddings @ self.LanguageMaps[language]
+        if self.ml_probe:
+            embeddings = embeddings @ self.LanguageMaps[language]
         embeddings = embeddings @ self.DepthProbe
 
         squared_norms = tf.norm(embeddings, ord='euclidean', axis=2) ** 2
