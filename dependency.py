@@ -159,7 +159,7 @@ class DependencyDistance(Dependency):
         Args:
           observation: a single Observation class for a sentence:
         Returns:
-          A torch tensor of shape (sentence_length, sentence_length) of distances
+          A tensor of shape (sentence_length, sentence_length) of distances
           in the parse tree as specified by the observation annotation.
         """
         distances = []

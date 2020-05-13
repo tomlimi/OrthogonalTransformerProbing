@@ -68,10 +68,8 @@ class Probe():
     def train_factory(self, *args, **kwargs):
         pass
 
-
     def train(self, dep_dataset, args):
         curr_patience = 0
-        optimizer_reseted = False
         for epoch_idx in range(args.epochs):
             progressbar = tqdm(enumerate(dep_dataset.train.train_batches(args.batch_size)))
             for batch_idx, batch in progressbar:
@@ -83,18 +81,19 @@ class Probe():
             if eval_loss < self.optimal_loss - self.ES_DELTA:
                 self.optimal_loss = eval_loss
                 self.checkpoint_manager.save()
-                optimizer_reseted = False
                 curr_patience = 0
             else:
                 curr_patience += 1
 
-            if curr_patience > 0 and not optimizer_reseted:
+            if curr_patience > 0:
                 self._lr *= self.ONPLATEU_DECAY
-                self._optimizer = tf.optimizers.Adam(lr=self._lr)
-                optimizer_reseted = True
+                self._optimizer.learning_rate.assign(self._lr)
+                reset_variables = [np.zeros_like(var.numpy()) for var in self._optimizer.variables()]
+                self._optimizer.set_weights(reset_variables)
             if curr_patience > self.ES_PATIENCE:
                 self.load(args)
                 break
+            print(self._optimizer.get_config())
 
     def evaluate(self, data, data_name, args):
         all_losses = np.zeros((len(self.languages)))
@@ -113,7 +112,6 @@ class Probe():
         
     def load(self, args):
         self.checkpoint_manager.restore_or_initialize()
-        #status.assert_consumed()
 
 
 class DistanceProbe(Probe):

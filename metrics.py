@@ -84,8 +84,8 @@ class Spearman(Metric):
     
     def __init__(self, min_len=5, max_len=50):
         self.per_sent_len = defaultdict(list)
-        self.min_len = 5
-        self.max_len = 50
+        self.min_len = min_len
+        self.max_len = max_len
         
         super().__init__()
 
