@@ -35,10 +35,14 @@ class DependencyDataset:
 			self.segments = tf.gather(language_data.segments, batch_indices)
 			self.token_len = tf.gather(language_data.token_len, batch_indices)
 			self.max_token_len = tf.repeat(max_token_len, tf.size(batch_indices))
+			seq_mask = tf.cast(tf.sequence_mask(self.token_len, max_token_len), tf.float32)
 			if task.lower() == "distance":
 				self.target = tf.gather(language_data.target, batch_indices)[:,:max_token_len,:max_token_len]
+				seq_mask = tf.expand_dims(seq_mask, 1)
+				self.mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 			elif task.lower() == "depth":
 				self.target = tf.gather(language_data.target, batch_indices)[:,:max_token_len]
+				self.mask = seq_mask
 			else:
 				raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(task))
 			
