@@ -27,7 +27,7 @@ class DistanceReporter(Reporter):
 		for language in self.dataset._languages:
 			prefix = '{}.{}.'.format(self.dataset_name, language)
 			with open(os.path.join(args.out_dir, prefix + 'uuas'), 'w') as uuas_f:
-				uuas_f.write(str(self.uuas[language].result()))
+				uuas_f.write(str(self.uuas[language].result())+'\n')
 			
 			with open(os.path.join(args.out_dir, prefix + 'spearman'), 'w') as sperarman_f:
 				for sent_l, val in self.sprarman_d[language].result().items():
@@ -35,7 +35,7 @@ class DistanceReporter(Reporter):
 			
 			with open(os.path.join(args.out_dir, prefix + 'spearman_mean'), 'w') as sperarman_mean_f:
 				result = str(np.nanmean(np.fromiter(self.sprarman_d[language].result().values(), dtype=float)))
-				sperarman_mean_f.write(result)
+				sperarman_mean_f.write(result+'\n')
 	
 	def predict(self, args):
 		for language in self.dataset._languages:
@@ -48,20 +48,26 @@ class DistanceReporter(Reporter):
 				predicted = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
 				             in zip(tf.unstack(predicted), batch.token_len)]
 				
-				self.batch_uuas(language, batch.uu_relations, predicted)
-				
 				gold_distances = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
 				                  in zip(tf.unstack(batch.target), batch.token_len)]
+				
 				self.batch_spearman(language, gold_distances, predicted)
+				
+				self.batch_uuas(language, batch.uu_relations, predicted, batch.punctuation_mask)
+				
+
 	
-	def batch_uuas(self, language, batch_gold, batch_prediction):
+	def batch_uuas(self, language, batch_gold, batch_prediction, batch_punctuation_mask):
 		# run maximum spanning tree algorithm for each predicted matrix
-		for sent_gold, sent_predicted in zip(batch_gold, batch_prediction):
+		for sent_gold, sent_predicted, sent_punctuation_mask in zip(batch_gold, batch_prediction, batch_punctuation_mask):
+			sent_predicted[sent_punctuation_mask,:] = np.inf
+			sent_predicted[:,sent_punctuation_mask] = np.inf
 			min_spanning_tree = sparse.csgraph.minimum_spanning_tree(sent_predicted).tocoo()
 			sent_predicted = set(map(frozenset, zip(min_spanning_tree.row + 1, min_spanning_tree.col + 1)))
 			self.uuas[language].update_state(sent_gold, sent_predicted)
 	
 	def batch_spearman(self, language, batch_gold, batch_prediction):
+		
 		self.sprarman_d[language](batch_gold, batch_prediction)
 
 
@@ -77,7 +83,7 @@ class DepthReporter(Reporter):
 		for language in self.dataset._languages:
 			prefix = '{}.{}.'.format(self.dataset_name, language)
 			with open(os.path.join(args.out_dir, prefix + 'root_acc'), 'w') as root_acc_f:
-				root_acc_f.write(str(self.root_acc[language].result()))
+				root_acc_f.write(str(self.root_acc[language].result()) + '\n')
 			
 			with open(os.path.join(args.out_dir, prefix + 'spearman'), 'w') as sperarman_f:
 				for sent_l, val in self.sprarman_n[language].result().items():
@@ -85,7 +91,7 @@ class DepthReporter(Reporter):
 			
 			with open(os.path.join(args.out_dir, prefix + 'spearman_mean'), 'w') as sperarman_mean_f:
 				result = str(np.nanmean(np.fromiter(self.sprarman_n[language].result().values(), dtype=float)))
-				sperarman_mean_f.write(result)
+				sperarman_mean_f.write(result+'\n')
 	
 	def predict(self, args):
 		for language in self.dataset._languages:
@@ -98,14 +104,21 @@ class DepthReporter(Reporter):
 				predicted = [sent_predicted.numpy()[:sent_len] for sent_predicted, sent_len
 				             in zip(tf.unstack(predicted), batch.token_len)]
 				
-				self.batch_root_accuracy(language, batch.roots, predicted)
-				
 				gold_depths = [sent_gold.numpy()[:sent_len] for sent_gold, sent_len
 				               in zip(tf.unstack(batch.target), batch.token_len)]
 				self.batch_spearman(language, gold_depths, predicted)
+				
+				self.batch_root_accuracy(language, batch.roots, predicted, batch.punctuation_mask)
+				
+
 	
-	def batch_root_accuracy(self, language, batch_gold, batch_prediction):
-		self.root_acc[language](batch_gold, [sent_predicted.argmin() + 1 for sent_predicted in batch_prediction])
+	def batch_root_accuracy(self, language, batch_gold, batch_prediction, batch_punctution_mask):
+		batch_non_punct_prediction = []
+		for sent_predicted, sent_punctuation_mask in zip(batch_prediction, batch_punctution_mask):
+			sent_predicted[sent_punctuation_mask] = np.inf
+			batch_non_punct_prediction.append(sent_predicted)
+
+		self.root_acc[language](batch_gold, [sent_predicted.argmin() + 1 for sent_predicted in batch_non_punct_prediction])
 	
 	def batch_spearman(self, language, batch_gold, batch_prediction):
 		self.sprarman_n[language](batch_gold, batch_prediction)

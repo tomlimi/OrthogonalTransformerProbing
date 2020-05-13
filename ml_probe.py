@@ -23,6 +23,7 @@ if __name__ == "__main__":
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
 	# Train arguments
+	parser.add_argument("--seed", default=42, type=int, help="Seed for variable initialisation")
 	parser.add_argument("--batch-size", default=20, type=int, help="Batch size")
 	parser.add_argument("--epochs", default=40, type=int, help="Maximal number of training epochs")
 	parser.add_argument("--learning-rate", default=0.001, type=float, help="Initial learning rate")
@@ -45,16 +46,17 @@ if __name__ == "__main__":
 	experiment_name = f"task:{args.task.lower()}-layer:{args.layer_index}-trainl:{'_'.join(args.train_languages)}"
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
 	
-	assert set(args.train_languages) >= set(args.dev_languages),\
-		"Currently, evaluation is possible only for languages on which probes were trained"
-	assert set(args.train_languages) >= set(args.test_languages),\
-		"Currently, evaluation is possible only for languages on which probes were trained"
-	assert len(args.train_languages) == len(args.train_data), \
-		"Number of train data files and languages needs to be the same"
-	assert len(args.dev_languages) == len(args.dev_data), \
-		"Number of development data files and languages needs to be the same"
-	assert len(args.test_languages) == len(args.test_data), \
-		"Number of test data files and languages needs to be the same"
+	if not args.no_training:
+		assert set(args.train_languages) >= set(args.dev_languages),\
+			"Currently, evaluation is possible only for languages on which probes were trained"
+		assert set(args.train_languages) >= set(args.test_languages),\
+			"Currently, evaluation is possible only for languages on which probes were trained"
+		assert len(args.train_languages) == len(args.train_data), \
+			"Number of train data files and languages needs to be the same"
+		assert len(args.dev_languages) == len(args.dev_data), \
+			"Number of development data files and languages needs to be the same"
+		assert len(args.test_languages) == len(args.test_data), \
+			"Number of test data files and languages needs to be the same"
 	
 	dataset_files = {'train': args.train_data,
 	                 'dev': args.dev_data,

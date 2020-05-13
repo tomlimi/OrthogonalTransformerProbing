@@ -127,7 +127,8 @@ class DistanceProbe(Probe):
         print('Constructing DistanceProbe')
         super().__init__(args)
 
-        self.DistanceProbe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
+        self.DistanceProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
+                                         ((self.probe_rank, self.model_dim)),
                                          trainable=True, name='distance_probe', dtype=tf.float32)
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
         
@@ -199,9 +200,10 @@ class DepthProbe(Probe):
     """ Computes squared L2 norm of words after projection by a matrix."""
 
     def __init__(self, args):
-        print('Constructing DistanceProbe')
+        print('Constructing DepthProbe')
         super().__init__(args)
-        self.DepthProbe = tf.Variable(tf.initializers.GlorotUniform(seed=42)((self.probe_rank, self.model_dim)),
+        self.DepthProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
+                                      ((self.probe_rank, self.model_dim)),
                                       trainable=True, name='depth_probe', dtype=tf.float32)
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
 

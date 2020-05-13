@@ -17,6 +17,7 @@ class Dependency():
         self.tokens = []
         self.relations = []
         self.roots = []
+        self.punctuation_mask = []
 
         self.read_conllu(conll_file)
 
@@ -26,7 +27,9 @@ class Dependency():
     
     @property
     def unlabeled_unordered_relations(self):
-        return [{frozenset((dep, parent)) for dep, parent in sent_relation} for sent_relation in self.relations]
+        return [{frozenset((dep, parent)) for dep, parent in sent_relation
+                 if not sent_punctuation_mask[dep - 1]}
+                for sent_relation, sent_punctuation_mask in zip(self.relations, self.punctuation_mask)]
     
     @property
     def word_count(self):
@@ -39,10 +42,13 @@ class Dependency():
             self.relations = [v for i, v in enumerate(self.relations) if i not in indices_to_rm]
         if self.roots:
             self.roots = [v for i, v in enumerate(self.roots) if i not in indices_to_rm]
+        if self.punctuation_mask:
+            self.punctuation_mask = [v for i, v in enumerate(self.punctuation_mask) if i not in indices_to_rm]
 
     def read_conllu(self, conll_file_path):
         sentence_relations = []
         sentence_tokens = []
+        sentence_punctuation_mask = []
 
         with open(conll_file_path, 'r') as in_conllu:
             sentid = 0
@@ -52,6 +58,8 @@ class Dependency():
                     sentence_relations = []
                     self.tokens.append(sentence_tokens)
                     sentence_tokens = []
+                    self.punctuation_mask.append(sentence_punctuation_mask)
+                    sentence_punctuation_mask = []
                     sentid += 1
                 elif line.startswith('#'):
                     continue
@@ -66,6 +74,8 @@ class Dependency():
                             self.roots.append(int(fields[constants.CONLLU_ID]))
 
                         sentence_tokens.append(fields[constants.CONLLU_ORTH])
+                        
+                        sentence_punctuation_mask.append(fields[constants.CONLLU_POS] == 'PUNCT')
 
     def get_bert_ids(self, wordpieces):
         """Token ids from Tokenizer vocab"""

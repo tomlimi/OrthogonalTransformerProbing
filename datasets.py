@@ -21,6 +21,7 @@ class DependencyDataset:
 			
 			self.roots = dependency_data.roots
 			self.uu_relations = dependency_data.unlabeled_unordered_relations
+			self.punctuation_mask = dependency_data.punctuation_mask
 			
 		@property
 		def size(self):
@@ -43,6 +44,8 @@ class DependencyDataset:
 			
 			self.roots = [np.array(language_data.roots[exmpl_idx]) for exmpl_idx in batch_indices]
 			self.uu_relations = [language_data.uu_relations[exmpl_idx] for exmpl_idx in batch_indices]
+			self.punctuation_mask = [np.array(language_data.punctuation_mask[exmpl_idx])
+			                             for exmpl_idx in batch_indices]
 			
 	class Dataset:
 		def __init__(self, datafiles, languages, task, tokenizer, shuffle_batches=True, seed=42):
