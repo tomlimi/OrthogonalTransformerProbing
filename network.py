@@ -52,6 +52,7 @@ class Probe():
                              for lang in self.languages}
 
         self._lr = args.learning_rate
+        self._clip_norm = args.clip_norm
         self._optimizer = tf.optimizers.Adam(lr=self._lr)
 
         self.optimal_loss = np.inf
@@ -97,8 +98,6 @@ class Probe():
                 break
             with self._writer.as_default():
                 tf.summary.scalar("train/learning_rate", self._optimizer.learning_rate)
-                
-            print(self._optimizer.get_config())
 
     def evaluate(self, data, data_name, args):
         all_losses = np.zeros((len(self.languages)))
@@ -188,6 +187,8 @@ class DistanceProbe(Probe):
                 variables = [self.DistanceProbe]
             gradients = tape.gradient(loss, variables)
             gradient_norms = [tf.norm(grad) for grad in gradients]
+            if self._clip_norm:
+                gradients = [tf.clip_by_norm(grad, self._clip_norm) for grad in gradients]
             self._optimizer.apply_gradients(zip(gradients, variables))
             tf.summary.experimental.set_step(self._optimizer.iterations)
 
@@ -263,6 +264,8 @@ class DepthProbe(Probe):
                 variables = [self.DepthProbe]
             gradients = tape.gradient(loss, variables)
             gradient_norms = [tf.norm(grad) for grad in gradients]
+            if self._clip_norm:
+                gradients = [tf.clip_by_norm(grad, self._clip_norm) for grad in gradients]
             self._optimizer.apply_gradients(zip(gradients, variables))
             tf.summary.experimental.set_step(self._optimizer.iterations)
             

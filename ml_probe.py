@@ -1,5 +1,6 @@
 import os
 import argparse
+import json
 
 from datasets import DependencyDataset
 from network import DistanceProbe, DepthProbe
@@ -27,6 +28,7 @@ if __name__ == "__main__":
 	parser.add_argument("--batch-size", default=20, type=int, help="Batch size")
 	parser.add_argument("--epochs", default=40, type=int, help="Maximal number of training epochs")
 	parser.add_argument("--learning-rate", default=0.001, type=float, help="Initial learning rate")
+	parser.add_argument("--clip-norm", default=None, type=float, help="Clip gradient norm to this value")
 	# Specify Bert Model
 	parser.add_argument("--bert-dir", default="/net/projects/bert/models/", type=str,
 	                    help="Directory where BERT resources are storred (vocab, trained checkpoints)")
@@ -45,6 +47,10 @@ if __name__ == "__main__":
 	
 	experiment_name = f"task_{args.task.lower()}-layer_{args.layer_index}-trainl_{'_'.join(args.train_languages)}"
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
+	os.mkdir(args.parent_dir)
+	os.mkdir(args.out_dir)
+	with open(os.path.join(args.out_dir, 'args.json'), 'wt') as out_f:
+		json.dump(vars(args), out_f)
 	
 	if not args.no_training:
 		assert set(args.train_languages) >= set(args.dev_languages),\
