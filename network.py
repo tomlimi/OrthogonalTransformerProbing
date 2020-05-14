@@ -16,19 +16,19 @@ class BertModel():
 
         bert_params = bert.params_from_pretrained_ckpt(modelBertDir)
         self.bert_layer = bert.BertModelLayer.from_params(bert_params, name="bert", out_layer_ndxs=[layer_idx])
-        self.bert_layer.apply_adapter_freeze()
 
         self.model = tf.keras.Sequential([
             tf.keras.layers.Input(shape=(constants.MAX_WORDPIECES,), dtype='int32', name='input_ids'),
             self.bert_layer])
 
         self.model.build(input_shape=(None, constants.MAX_WORDPIECES))
-
+        self.bert_layer.apply_adapter_freeze()
+        
         checkpointName = os.path.join(modelBertDir, "bert_model.ckpt")
         bert.load_stock_weights(self.bert_layer, checkpointName)
 
-    def __call__(self, wordpiece_ids):
-        embeddings = self.model(wordpiece_ids)
+    def __call__(self, wordpiece_ids, *args, **kwargs):
+        embeddings = self.model(wordpiece_ids, *args, **kwargs)
         return embeddings
 
 
@@ -55,6 +55,8 @@ class Probe():
         self._optimizer = tf.optimizers.Adam(lr=self._lr)
 
         self.optimal_loss = np.inf
+
+        self._writer = tf.summary.create_file_writer(args.out_dir, flush_millis=10 * 1000, name='summary_writer')
 
     @abstractmethod
     def _forward(self, *args, **kwargs):
@@ -93,6 +95,9 @@ class Probe():
             if curr_patience > self.ES_PATIENCE:
                 self.load(args)
                 break
+            with self._writer.as_default():
+                tf.summary.scalar("train/learning_rate", self._optimizer.learning_rate)
+                
             print(self._optimizer.get_config())
 
     def evaluate(self, data, data_name, args):
@@ -106,8 +111,13 @@ class Probe():
                 all_losses[lang_idx] += batch_loss
 
             all_losses[lang_idx] = all_losses[lang_idx] / (batch_idx + 1.)
+            with self._writer.as_default():
+                tf.summary.scalar("{}/loss_{}".format(data_name, language), all_losses[lang_idx])
+                
             print(f'Evaluation loss for: {language} : {all_losses[lang_idx]:.4f}')
-
+            
+        with self._writer.as_default():
+            tf.summary.scalar("{}/loss".format(data_name), all_losses.mean())
         return all_losses.mean()
         
     def load(self, args):
@@ -142,7 +152,7 @@ class DistanceProbe(Probe):
         Note that due to padding, some distances will be non-zero for pads.
         Computes (B(h_i-h_j))^T(B(h_i-h_j)) for all i,j
         """
-        embeddings = self.bert_model(wordpieces)
+        embeddings = self.bert_model(wordpieces, training=False)
         # average wordpieces to obtain word representation
         # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same
         embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
@@ -177,7 +187,16 @@ class DistanceProbe(Probe):
             else:
                 variables = [self.DistanceProbe]
             gradients = tape.gradient(loss, variables)
+            gradient_norms = [tf.norm(grad) for grad in gradients]
             self._optimizer.apply_gradients(zip(gradients, variables))
+            tf.summary.experimental.set_step(self._optimizer.iterations)
+
+            with self._writer.as_default(), tf.summary.record_if(self._optimizer.iterations // len(self.languages) % 10 == 0):
+                tf.summary.scalar("train/batch_loss_{}".format(language), loss)
+                tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
+                if self.ml_probe:
+                    tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
+            
 
             return loss
         return train_on_batch
@@ -214,7 +233,7 @@ class DepthProbe(Probe):
         """ Computes all n depths after projection for each sentence in a batch.
         Computes (Bh_i)^T(Bh_i) for all i
         """
-        embeddings = self.bert_model(wordpieces)
+        embeddings = self.bert_model(wordpieces, training=False)
         embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                (embeddings, segments, max_token_len), dtype=tf.float32)
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
@@ -243,7 +262,15 @@ class DepthProbe(Probe):
             else:
                 variables = [self.DepthProbe]
             gradients = tape.gradient(loss, variables)
+            gradient_norms = [tf.norm(grad) for grad in gradients]
             self._optimizer.apply_gradients(zip(gradients, variables))
+            tf.summary.experimental.set_step(self._optimizer.iterations)
+            
+            with self._writer.as_default(), tf.summary.record_if(self._optimizer.iterations // len(self.languages) % 10 == 0):
+                tf.summary.scalar("train/batch_loss_{}".format(language), loss)
+                tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
+                if self.ml_probe:
+                    tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
 
             return loss
         return train_on_batch

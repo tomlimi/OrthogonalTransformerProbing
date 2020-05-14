@@ -43,7 +43,7 @@ if __name__ == "__main__":
 	# compatibility
 	args.ml_probe = args.no_ml_probe
 	
-	experiment_name = f"task:{args.task.lower()}-layer:{args.layer_index}-trainl:{'_'.join(args.train_languages)}"
+	experiment_name = f"task_{args.task.lower()}-layer_{args.layer_index}-trainl_{'_'.join(args.train_languages)}"
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
 	
 	if not args.no_training:
