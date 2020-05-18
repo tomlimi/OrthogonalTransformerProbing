@@ -47,8 +47,8 @@ if __name__ == "__main__":
 	
 	experiment_name = f"task_{args.task.lower()}-layer_{args.layer_index}-trainl_{'_'.join(args.train_languages)}"
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
-	os.mkdir(args.parent_dir)
-	os.mkdir(args.out_dir)
+	if not os.path.exists(args.out_dir):
+		os.mkdir(args.out_dir)
 	with open(os.path.join(args.out_dir, 'args.json'), 'wt') as out_f:
 		json.dump(vars(args), out_f)
 	
