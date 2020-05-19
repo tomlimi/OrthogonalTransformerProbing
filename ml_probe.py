@@ -28,6 +28,7 @@ if __name__ == "__main__":
 	parser.add_argument("--batch-size", default=20, type=int, help="Batch size")
 	parser.add_argument("--epochs", default=40, type=int, help="Maximal number of training epochs")
 	parser.add_argument("--learning-rate", default=0.001, type=float, help="Initial learning rate")
+	parser.add_argument("--ortho", default=None, type=float, help="Orthogonality reguralization (SRIP) for language map matrices.")
 	parser.add_argument("--clip-norm", default=None, type=float, help="Clip gradient norm to this value")
 	# Specify Bert Model
 	parser.add_argument("--bert-dir", default="/net/projects/bert/models/", type=str,

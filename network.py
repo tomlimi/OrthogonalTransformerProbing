@@ -53,6 +53,7 @@ class Probe():
 
         self._lr = args.learning_rate
         self._clip_norm = args.clip_norm
+        self._orthogonal_reg = args.ortho
         self._optimizer = tf.optimizers.Adam(lr=self._lr)
 
         self.optimal_loss = np.inf
@@ -62,6 +63,22 @@ class Probe():
     @abstractmethod
     def _forward(self, *args, **kwargs):
         pass
+
+    @staticmethod
+    @tf.function
+    def ortho_reguralization(w):
+        """RIPS implementation according to:
+        https://papers.nips.cc/paper/7680-can-we-gain-more-from-orthogonality-regularizations-in-training-deep-networks.pdf"""
+        w_cols = w.shape[0]
+
+        S = tf.transpose(w, perm=[1, 0]) @ w - tf.eye(w_cols)
+
+        v = tf.random.uniform([w_cols, 1])
+        # small noise is added to solve the problem with orthogonal matrix at the begining
+        noise = tf.random.normal([w_cols, 1], 0.0, 1e-4)
+        u = S @ v + noise
+        v2 = S @ (u / tf.norm(u)) + noise
+        return tf.norm(v2)
 
     @abstractmethod
     def _loss(self, *args, **kwargs):
@@ -180,6 +197,8 @@ class DistanceProbe(Probe):
             with tf.GradientTape() as tape:
                 predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_distances, target, mask, token_len)
+                if self._orthogonal_reg:
+                    loss += self._orthogonal_reg * self.ortho_reguralization(self.LanguageMaps[language])
 
             if self.ml_probe:
                 variables = [self.DistanceProbe, self.LanguageMaps[language]]
@@ -257,6 +276,8 @@ class DepthProbe(Probe):
             with tf.GradientTape() as tape:
                 predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_depths, target, mask, token_len)
+                if self._orthogonal_reg:
+                    loss += self._orthogonal_reg * self.ortho_reguralization(self.LanguageMaps[language])
 
             if self.ml_probe:
                 variables = [self.DepthProbe, self.LanguageMaps[language]]
