@@ -54,6 +54,7 @@ class Probe():
         self._lr = args.learning_rate
         self._clip_norm = args.clip_norm
         self._orthogonal_reg = args.ortho
+        self._l2_reg = args.l2
         self._optimizer = tf.optimizers.Adam(lr=self._lr)
 
         self.optimal_loss = np.inf
@@ -67,18 +68,27 @@ class Probe():
     @staticmethod
     @tf.function
     def ortho_reguralization(w):
-        """RIPS implementation according to:
+        """DSO implementation according to:
         https://papers.nips.cc/paper/7680-can-we-gain-more-from-orthogonality-regularizations-in-training-deep-networks.pdf"""
+        #
         w_cols = w.shape[0]
+        w_rows = w.shape[1]
+        reg = tf.norm(tf.transpose(w) @ w - tf.eye(w_cols)) + tf.norm(w @ tf.transpose(w) - tf.eye(w_rows))
+        if reg == 0:
+            reg = 1e-6
+        tf.print(reg)
+        return reg
 
-        S = tf.transpose(w, perm=[1, 0]) @ w - tf.eye(w_cols)
-
-        v = tf.random.uniform([w_cols, 1])
-        # small noise is added to solve the problem with orthogonal matrix at the begining
-        noise = tf.random.normal([w_cols, 1], 0.0, 1e-4)
-        u = S @ v + noise
-        v2 = S @ (u / tf.norm(u)) + noise
-        return tf.norm(v2)
+        # SRIP
+        #
+        # S = tf.transpose(w, perm=[1, 0]) @ w - tf.eye(w_cols)
+        #
+        # v = tf.random.uniform([w_cols, 1])
+        # # small noise is added to solve the problem with orthogonal matrix at the begining
+        # noise = tf.random.normal([w_cols, 1], 0.0, 1e-4)
+        # u = S @ v + noise
+        # v2 = S @ (u / tf.norm(u)) + noise
+        # return tf.norm(v2)
 
     @abstractmethod
     def _loss(self, *args, **kwargs):
@@ -199,6 +209,9 @@ class DistanceProbe(Probe):
                 loss = self._loss(predicted_distances, target, mask, token_len)
                 if self._orthogonal_reg:
                     loss += self._orthogonal_reg * self.ortho_reguralization(self.LanguageMaps[language])
+                if self._l2_reg:
+                    loss += self._l2_reg * tf.norm(self.LanguageMaps[language])
+                    loss += self._l2_reg * tf.norm(self.DistanceProbe)
 
             if self.ml_probe:
                 variables = [self.DistanceProbe, self.LanguageMaps[language]]
@@ -278,6 +291,9 @@ class DepthProbe(Probe):
                 loss = self._loss(predicted_depths, target, mask, token_len)
                 if self._orthogonal_reg:
                     loss += self._orthogonal_reg * self.ortho_reguralization(self.LanguageMaps[language])
+                if self._l2_reg:
+                    loss += self._l2_reg * tf.norm(self.LanguageMaps[language])
+                    loss += self._l2_reg * tf.norm(self.DepthProbe)
 
             if self.ml_probe:
                 variables = [self.DepthProbe, self.LanguageMaps[language]]
