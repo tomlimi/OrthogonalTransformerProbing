@@ -74,9 +74,9 @@ class Probe():
         w_cols = w.shape[0]
         w_rows = w.shape[1]
         reg = tf.norm(tf.transpose(w) @ w - tf.eye(w_cols)) + tf.norm(w @ tf.transpose(w) - tf.eye(w_rows))
+        # to avoid NaN in gradient update
         if reg == 0:
             reg = 1e-6
-        tf.print(reg)
         return reg
 
         # SRIP
@@ -118,8 +118,10 @@ class Probe():
             if curr_patience > 0:
                 self._lr *= self.ONPLATEU_DECAY
                 self._optimizer.learning_rate.assign(self._lr)
-                # reset_variables = [np.zeros_like(var.numpy()) for var in self._optimizer.variables()]
-                # self._optimizer.set_weights(reset_variables)
+                # zeroing optimizer weights in`no ml` setting to reproduce Hewitt's results
+                if not self.ml_probe:
+                    reset_variables = [np.zeros_like(var.numpy()) for var in self._optimizer.variables()]
+                    self._optimizer.set_weights(reset_variables)
             if curr_patience > self.ES_PATIENCE:
                 self.load(args)
                 break
@@ -207,8 +209,9 @@ class DistanceProbe(Probe):
             with tf.GradientTape() as tape:
                 predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_distances, target, mask, token_len)
-                if self._orthogonal_reg:
-                    loss += self._orthogonal_reg * self.ortho_reguralization(self.LanguageMaps[language])
+                if self._orthogonal_reg and self.ml_probe:
+                    ortho_penalty = self.ortho_reguralization(self.LanguageMaps[language])
+                    loss += self._orthogonal_reg * ortho_penalty
                 if self._l2_reg:
                     loss += self._l2_reg * tf.norm(self.LanguageMaps[language])
                     loss += self._l2_reg * tf.norm(self.DistanceProbe)
@@ -227,6 +230,8 @@ class DistanceProbe(Probe):
             with self._writer.as_default(), tf.summary.record_if(self._optimizer.iterations // len(self.languages) % 10 == 0):
                 tf.summary.scalar("train/batch_loss_{}".format(language), loss)
                 tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
+                if self._orthogonal_reg:
+                    tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
                 if self.ml_probe:
                     tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
             
@@ -289,8 +294,9 @@ class DepthProbe(Probe):
             with tf.GradientTape() as tape:
                 predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
                 loss = self._loss(predicted_depths, target, mask, token_len)
-                if self._orthogonal_reg:
-                    loss += self._orthogonal_reg * self.ortho_reguralization(self.LanguageMaps[language])
+                if self._orthogonal_reg and self.ml_probe:
+                    ortho_penalty = self.ortho_reguralization(self.LanguageMaps[language])
+                    loss += self._orthogonal_reg * ortho_penalty
                 if self._l2_reg:
                     loss += self._l2_reg * tf.norm(self.LanguageMaps[language])
                     loss += self._l2_reg * tf.norm(self.DepthProbe)
@@ -309,6 +315,8 @@ class DepthProbe(Probe):
             with self._writer.as_default(), tf.summary.record_if(self._optimizer.iterations // len(self.languages) % 10 == 0):
                 tf.summary.scalar("train/batch_loss_{}".format(language), loss)
                 tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
+                if self._orthogonal_reg:
+                    tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
                 if self.ml_probe:
                     tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
 

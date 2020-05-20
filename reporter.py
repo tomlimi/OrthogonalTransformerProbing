@@ -53,10 +53,8 @@ class DistanceReporter(Reporter):
 				
 				self.batch_spearman(language, gold_distances, predicted)
 				
-				self.batch_uuas(language, batch.uu_relations, predicted, batch.punctuation_mask)
+				self.batch_uuas(language, gold_distances, predicted, batch.punctuation_mask)
 				
-
-	
 	def batch_uuas(self, language, batch_gold, batch_prediction, batch_punctuation_mask):
 		# run maximum spanning tree algorithm for each predicted matrix
 		for sent_gold, sent_predicted, sent_punctuation_mask in zip(batch_gold, batch_prediction, batch_punctuation_mask):
@@ -64,6 +62,11 @@ class DistanceReporter(Reporter):
 			sent_predicted[:,sent_punctuation_mask] = np.inf
 			min_spanning_tree = sparse.csgraph.minimum_spanning_tree(sent_predicted).tocoo()
 			sent_predicted = set(map(frozenset, zip(min_spanning_tree.row + 1, min_spanning_tree.col + 1)))
+			
+			sent_gold[sent_punctuation_mask,:] = np.inf
+			sent_gold[:,sent_punctuation_mask] = np.inf
+			min_spanning_tree_gold = sparse.csgraph.minimum_spanning_tree(sent_gold).tocoo()
+			sent_gold = set(map(frozenset, zip(min_spanning_tree_gold.row + 1, min_spanning_tree_gold.col + 1)))
 			self.uuas[language].update_state(sent_gold, sent_predicted)
 	
 	def batch_spearman(self, language, batch_gold, batch_prediction):

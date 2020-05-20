@@ -52,7 +52,7 @@ class UUAS(Metric):
     def result(self):
         if not self.all_correct:
             return 0.
-        return 2. / (self.all_predicted / self.all_correct + self.all_gold / self.all_correct)
+        return self.all_correct / float(self.all_gold)
 
 
 class RootAcc(Metric):

@@ -28,7 +28,7 @@ class Dependency():
     @property
     def unlabeled_unordered_relations(self):
         return [{frozenset((dep, parent)) for dep, parent in sent_relation
-                 if not sent_punctuation_mask[dep - 1]}
+                 if (not sent_punctuation_mask[dep - 1]) and parent}
                 for sent_relation, sent_punctuation_mask in zip(self.relations, self.punctuation_mask)]
     
     @property

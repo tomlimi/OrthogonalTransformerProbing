@@ -51,8 +51,9 @@ if __name__ == "__main__":
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
 	if not os.path.exists(args.out_dir):
 		os.mkdir(args.out_dir)
-	with open(os.path.join(args.out_dir, 'args.json'), 'wt') as out_f:
-		json.dump(vars(args), out_f)
+	if not args.no_training:
+		with open(os.path.join(args.out_dir, 'args.json'), 'wt') as out_f:
+			json.dump(vars(args), out_f)
 	
 	if not args.no_training:
 		assert set(args.train_languages) >= set(args.dev_languages),\
