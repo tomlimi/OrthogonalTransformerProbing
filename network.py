@@ -23,8 +23,7 @@ class Probe():
         self.languages = args.train_languages
 
         self.bert_model = TFBertModel.from_pretrained(args.bert_path,
-                                                      output_hidden_states=True,
-                                                      max_position_embeddings=constants.MAX_WORDPIECES)
+                                                      output_hidden_states=True)
 
         self.ml_probe = args.ml_probe
 
