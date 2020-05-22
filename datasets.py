@@ -3,7 +3,7 @@ import os
 
 import tensorflow as tf
 import numpy as np
-import bert
+from transformers import BertTokenizer
 
 import constants
 
@@ -106,11 +106,10 @@ class DependencyDataset:
 				
 				yield batch
 
-	def __init__(self, dataset_files, dataset_languages, task, bert_dir, do_lower_case=True):
+	def __init__(self, dataset_files, dataset_languages, task, bert_path, do_lower_case=True):
 		assert dataset_files.keys() == dataset_languages.keys(), "Specify the same name of datasets."
 		
-		vocab_file = os.path.join(bert_dir, "vocab.txt")
-		tokenizer = bert.bert_tokenization.FullTokenizer(vocab_file, do_lower_case)
+		tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=do_lower_case)
 		
 		for dataset_name in dataset_files.keys():
 			setattr(self, dataset_name, self.Dataset(dataset_files[dataset_name],

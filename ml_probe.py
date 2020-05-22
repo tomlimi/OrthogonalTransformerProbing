@@ -32,9 +32,7 @@ if __name__ == "__main__":
 	parser.add_argument("--l2", default=None, type=float, help="L2 reguralization of the weights.")
 	parser.add_argument("--clip-norm", default=None, type=float, help="Clip gradient norm to this value")
 	# Specify Bert Model
-	parser.add_argument("--bert-dir", default="/net/projects/bert/models/", type=str,
-	                    help="Directory where BERT resources are storred (vocab, trained checkpoints)")
-	parser.add_argument("--casing", default=constants.CASING_UNCASED, help="Bert model casing")
+	parser.add_argument("--casing", default=constants.CASING_CASED, help="Bert model casing")
 	parser.add_argument("--language", default=constants.LANGUAGE_MULTILINGUAL, help="Bert model language")
 	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
 	# Reporting options
@@ -75,15 +73,10 @@ if __name__ == "__main__":
 	                     'dev': args.dev_languages,
 	                     'test': args.test_languages}
 	
-	args.bert_dir = os.path.join(args.bert_dir, "{}-{}-{}".format(args.language, args.size, args.casing))
-	if not os.path.exists(args.bert_dir):
-		raise ValueError(
-			"The requested Bert model combination {}-{}-{} does not exist".format(args.language, args.size,
-			                                                                      args.casing))
-	
+	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	do_lower_case = (args.casing == "uncased")
 	
-	dep_dataset = DependencyDataset(dataset_files, dataset_languages, args.task, args.bert_dir, do_lower_case)
+	dep_dataset = DependencyDataset(dataset_files, dataset_languages, args.task, args.bert_path, do_lower_case)
 	
 	if args.task.lower() == 'distance':
 		prober = DistanceProbe(args)

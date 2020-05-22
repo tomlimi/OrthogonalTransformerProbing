@@ -98,7 +98,7 @@ class Dependency():
         wordpieces = []
         indices_to_rm = []
         for idx, sent_tokens in enumerate(self.tokens[:]):
-            sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens))) + ["[SEP]"]
+            sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)), add_special_tokens=False) + ["[SEP]"]
             wordpieces.append(sent_wordpieces)
             if len(sent_tokens) >= constants.MAX_TOKENS:
                 print(f"Sentence {idx} too many tokens in file {self.conllu_name}, skipping.")

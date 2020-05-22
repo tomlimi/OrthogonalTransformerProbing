@@ -2,34 +2,13 @@
 import os
 
 import tensorflow as tf
-import bert
+from transformers import TFBertModel
 from abc import abstractmethod
 
 from tqdm import tqdm
 import numpy as np
 
 import constants
-
-class BertModel():
-
-    def __init__(self, modelBertDir, layer_idx=-1):
-
-        bert_params = bert.params_from_pretrained_ckpt(modelBertDir)
-        self.bert_layer = bert.BertModelLayer.from_params(bert_params, name="bert", out_layer_ndxs=[layer_idx])
-
-        self.model = tf.keras.Sequential([
-            tf.keras.layers.Input(shape=(constants.MAX_WORDPIECES,), dtype='int32', name='input_ids'),
-            self.bert_layer])
-
-        self.model.build(input_shape=(None, constants.MAX_WORDPIECES))
-        self.bert_layer.apply_adapter_freeze()
-        
-        checkpointName = os.path.join(modelBertDir, "bert_model.ckpt")
-        bert.load_stock_weights(self.bert_layer, checkpointName)
-
-    def __call__(self, wordpiece_ids, *args, **kwargs):
-        embeddings = self.model(wordpiece_ids, *args, **kwargs)
-        return embeddings
 
 
 class Probe():
@@ -43,7 +22,9 @@ class Probe():
         self.model_dim = args.bert_dim
         self.languages = args.train_languages
 
-        self.bert_model = BertModel(args.bert_dir, layer_idx=args.layer_index)
+        self.bert_model = TFBertModel.from_pretrained(args.bert_path,
+                                                      output_hidden_states=True,
+                                                      max_position_embeddings=constants.MAX_WORDPIECES)
 
         self.ml_probe = args.ml_probe
 
@@ -51,6 +32,7 @@ class Probe():
                                                trainable=self.ml_probe, name='{}_map'.format(lang))
                              for lang in self.languages}
 
+        self._layer_idx = args.layer_index
         self._lr = args.learning_rate
         self._clip_norm = args.clip_norm
         self._orthogonal_reg = args.ortho
@@ -180,7 +162,8 @@ class DistanceProbe(Probe):
         Note that due to padding, some distances will be non-zero for pads.
         Computes (B(h_i-h_j))^T(B(h_i-h_j)) for all i,j
         """
-        embeddings = self.bert_model(wordpieces, training=False)
+        _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
+        embeddings = bert_hidden[self._layer_idx + 1]
         # average wordpieces to obtain word representation
         # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same
         embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
@@ -271,7 +254,8 @@ class DepthProbe(Probe):
         """ Computes all n depths after projection for each sentence in a batch.
         Computes (Bh_i)^T(Bh_i) for all i
         """
-        embeddings = self.bert_model(wordpieces, training=False)
+        _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
+        embeddings = bert_hidden[self._layer_idx + 1]
         embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                (embeddings, segments, max_token_len), dtype=tf.float32)
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
