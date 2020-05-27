@@ -27,7 +27,7 @@ class Probe():
 
         self.ml_probe = args.ml_probe
 
-        self.LanguageMaps = {lang: tf.Variable(tf.initializers.Identity(gain=1.0)((self.model_dim, self.model_dim)),
+        self.LanguageMaps = {lang: tf.Variable(tf.initializers.Identity(gain=1.0)((self.model_dim, self.probe_rank)),
                                                trainable=self.ml_probe, name='{}_map'.format(lang))
                              for lang in self.languages}
 
@@ -123,7 +123,7 @@ class Probe():
             with self._writer.as_default():
                 tf.summary.scalar("{}/loss_{}".format(data_name, language), all_losses[lang_idx])
                 
-            print(f'Evaluation loss for: {language} : {all_losses[lang_idx]:.4f}')
+            print(f'{data_name} loss on {language} : {all_losses[lang_idx]:.4f}')
             
         with self._writer.as_default():
             tf.summary.scalar("{}/loss".format(data_name), all_losses.mean())
@@ -143,10 +143,16 @@ class DistanceProbe(Probe):
     def __init__(self, args):
         print('Constructing DistanceProbe')
         super().__init__(args)
-
-        self.DistanceProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
-                                         ((self.probe_rank, self.model_dim)),
-                                         trainable=True, name='distance_probe', dtype=tf.float32)
+        
+        if self._orthogonal_reg:
+            # if orthogonalization is used multilingual probe is only diagonal scaling
+            self.DistanceProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
+                                             ((1, self.probe_rank,)),
+                                             trainable=True, name='distance_probe', dtype=tf.float32)
+        else:
+            self.DistanceProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
+                                             ((self.probe_rank, self.probe_rank)),
+                                             trainable=True, name='distance_probe', dtype=tf.float32)
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
         
         #Checkpoint managment:
@@ -170,7 +176,11 @@ class DistanceProbe(Probe):
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
         if self.ml_probe:
             embeddings = embeddings @ self.LanguageMaps[language]
-        embeddings = embeddings @ self.DistanceProbe
+        if self._orthogonal_reg:
+            embeddings = embeddings * self.DistanceProbe
+        else:
+            embeddings = embeddings @ self.DistanceProbe
+        
         embeddings = tf.expand_dims(embeddings, 1)  # shape [batch, 1, seq_len, emb_dim]
         transposed_embeddings = tf.transpose(embeddings, perm=(0, 2, 1, 3))  # shape [batch, seq_len, 1, emb_dim]
         diffs = embeddings - transposed_embeddings  # shape [batch, seq_len, seq_len, emb_dim]
@@ -239,9 +249,17 @@ class DepthProbe(Probe):
     def __init__(self, args):
         print('Constructing DepthProbe')
         super().__init__(args)
-        self.DepthProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
-                                      ((self.probe_rank, self.model_dim)),
-                                      trainable=True, name='depth_probe', dtype=tf.float32)
+
+        if self._orthogonal_reg:
+            # if orthogonalization is used multilingual probe is only diagonal scaling
+            self.DepthProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
+                                          ((1, self.probe_rank)),
+                                          trainable=True, name='depth_probe', dtype=tf.float32)
+        else:
+            self.DepthProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
+                                          ((self.probe_rank, self.model_dim)),
+                                          trainable=True, name='depth_probe', dtype=tf.float32)
+            
         self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
 
         # Checkpoint managment:
@@ -260,7 +278,10 @@ class DepthProbe(Probe):
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
         if self.ml_probe:
             embeddings = embeddings @ self.LanguageMaps[language]
-        embeddings = embeddings @ self.DepthProbe
+        if self._orthogonal_reg:
+            embeddings = embeddings * self.DepthProbe
+        else:
+            embeddings = embeddings @ self.DepthProbe
 
         squared_norms = tf.norm(embeddings, ord='euclidean', axis=2) ** 2
         return squared_norms
