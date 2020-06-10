@@ -88,7 +88,7 @@ if __name__ == "__main__":
 	do_lower_case = (args.casing == "uncased")
 	
 	dep_dataset = DependencyDataset(dataset_files, dataset_languages, args.task, args.bert_path, do_lower_case)
-	raise(ValueError)
+
 	if args.task.lower() == 'distance':
 		prober = DistanceProbe(args)
 	elif args.task.lower() == 'depth':
