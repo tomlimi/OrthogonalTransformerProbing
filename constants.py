@@ -1,6 +1,6 @@
 # Wordpieces | Tokens limits
-MAX_TOKENS = 100
-MAX_WORDPIECES = 128
+MAX_TOKENS = 200
+MAX_WORDPIECES = 256
 
 # Conllu indices
 CONLLU_ID = 0

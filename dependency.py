@@ -82,6 +82,11 @@ class Dependency():
         token_ids = self.tokenizer.convert_tokens_to_ids(wordpieces)
         input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
         return input_ids
+    
+    @staticmethod
+    def prepare_training_example(wordpieces, tokens):
+        pass
+        #return bert_idcs, bert_idcs, max_segment
 
     def training_examples(self):
         '''
@@ -135,7 +140,7 @@ class Dependency():
                     curr_token = ''
                     
             if segment_id != len(sent_tokens):
-                print(f'Sentence {sent_idx} mismatch in number of tokens, skipped!')
+                print(f'Sentence {sent_idx} mismatch in number of tokens in file {self.conllu_name}, skipping.')
                 indices_to_rm.append(sent_idx)
             else:
                 segments.append(tf.constant(sent_segments, dtype=tf.int64))

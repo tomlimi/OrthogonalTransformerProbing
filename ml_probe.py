@@ -12,12 +12,14 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	#
 	parser.add_argument("parent_dir", type=str, default="/home/limisiewicz/PycharmProjects/MultilingualTransformerProbing/experiments", help="Parent experiment directory")
-	parser.add_argument("--train-data", nargs='*', type=str, required=True, help="Conllu files for training")
-	parser.add_argument("--train-languages", nargs='*', type=str, required=True, help="Languages of trianing conllu files")
-	parser.add_argument("--dev-data", nargs='*', type=str, required=True, help="Conllu files for validation")
-	parser.add_argument("--dev-languages", nargs='*', type=str, required=True, help="Languages of validation conllu files")
-	parser.add_argument("--test-data", nargs='*', type=str, required=True, help="Conllu files for validation")
-	parser.add_argument("--test-languages", nargs='*', type=str, required=True, help="Languages of validation conllu files")
+	parser.add_argument("--json-data", type=str, default=None, help="JSON with conllu and languages for training")
+	
+	parser.add_argument("--train-data", nargs='*', type=str, default=None, help="Conllu files for training")
+	parser.add_argument("--train-languages", nargs='*', type=str, default=None, help="Languages of trianing conllu files")
+	parser.add_argument("--dev-data", nargs='*', type=str, default=None, help="Conllu files for validation")
+	parser.add_argument("--dev-languages", nargs='*', type=str, default=None, help="Languages of validation conllu files")
+	parser.add_argument("--test-data", nargs='*', type=str, default=None, help="Conllu files for validation")
+	parser.add_argument("--test-languages", nargs='*', type=str, default=None, help="Languages of validation conllu files")
 	# Probe arguments
 	parser.add_argument("--task", default="distance", type=str, help="Probing task (distance or depth)")
 	parser.add_argument("--bert-dim", default=768, type=int, help="Dimensionality of BERT embeddings")
@@ -44,6 +46,15 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 	# compatibility
 	args.ml_probe = args.no_ml_probe
+	
+	if args.json_data:
+		with open(args.json_data, 'r') as data_f:
+			data_map = json.load(data_f)
+		for data_argument, data_value in data_map.items():
+			setattr(args, data_argument, data_value)
+	
+	if not (args.train_data and args.train_languages and args.dev_data and args.dev_languages and args.test_data and args.test_languages):
+		raise ValueError("Train/dev/test data and languages need to be provided in json or arguments.")
 	
 	experiment_name = f"task_{args.task.lower()}-layer_{args.layer_index}-trainl_{'_'.join(args.train_languages)}"
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
@@ -77,7 +88,7 @@ if __name__ == "__main__":
 	do_lower_case = (args.casing == "uncased")
 	
 	dep_dataset = DependencyDataset(dataset_files, dataset_languages, args.task, args.bert_path, do_lower_case)
-	
+	raise(ValueError)
 	if args.task.lower() == 'distance':
 		prober = DistanceProbe(args)
 	elif args.task.lower() == 'depth':
