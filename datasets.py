@@ -14,7 +14,7 @@ class DependencyDataset:
 	
 	class LanguageData:
 		
-		def __init__(self, language, dependency_data):
+		def __init__(self, language, dependency_data, shuffle_batches=True, seed=42):
 			self.language = language
 			self.wordpieces, self.segments, self.token_len = dependency_data.training_examples()
 			self.target = dependency_data.target_tensor()
@@ -22,10 +22,17 @@ class DependencyDataset:
 			self.roots = dependency_data.roots
 			self.uu_relations = dependency_data.unlabeled_unordered_relations
 			self.punctuation_mask = dependency_data.punctuation_mask
+
+			self._shuffler = np.random.RandomState(seed) if shuffle_batches else None
 			
 		@property
 		def size(self):
 			return self.wordpieces.shape[0]
+
+		def get_permutation(self, size=None):
+			size = size or self.size
+			return self._shuffler.permutation(size) if self._shuffler else np.arange(size)
+
 			
 	class Batch:
 		
@@ -67,11 +74,12 @@ class DependencyDataset:
 				else:
 					raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(task))
 				
-				self._data[language] = DependencyDataset.LanguageData(language, dependency_data)
+				self._data[language] = DependencyDataset.LanguageData(language, dependency_data,
+																	  shuffle_batches=shuffle_batches, seed=seed)
 				
 			# number of example is equal to number for the language with fewest sentences
 			self._size = min([lang_data.size for lang_data in self._data.values()])
-			self._shuffler = np.random.RandomState(seed) if shuffle_batches else None
+
 		
 		@property
 		def data(self):
@@ -82,19 +90,25 @@ class DependencyDataset:
 			return self._size
 	
 		def train_batches(self, size=None):
-			permutation = self._shuffler.permutation(self._size) if self._shuffler else np.arange(self._size)
-			while len(permutation):
-				batch_size = min(size or np.inf, len(permutation))
-				batch_perm = permutation[:batch_size]
-				permutation = permutation[batch_size:]
+			# We stop the training when examples ends for the language with the lowest number of sentences to make
+			# the data balanced per language.
+			permutations = {language: language_data.get_permutation(self.size)
+							for language, language_data in self._data.items()}
+			while any(len(permutation) for permutation in permutations.keys()):
 				for language in self._languages:
+					if not len(permutations[language]):
+						continue
+					batch_size = min(size or np.inf, len(permutations[language]))
+					batch_perm = permutations[language][:batch_size]
+					permutations[language] = permutations[language][batch_size:]
+
 					batch_indices = tf.constant(batch_perm)
 					max_token_len = tf.reduce_max(tf.gather(self._data[language].token_len, batch_indices))
 					batch = DependencyDataset.Batch(self._data[language], batch_indices, self._task, max_token_len)
 					yield batch
 				
 		def evaluate_batches(self, language, size=None):
-			permutation = np.arange(self._size)
+			permutation = self._data[language].get_permutation()
 			while len(permutation):
 				batch_size = min(size or np.inf, len(permutation))
 				batch_perm = permutation[:batch_size]
