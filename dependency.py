@@ -82,11 +82,6 @@ class Dependency():
         token_ids = self.tokenizer.convert_tokens_to_ids(wordpieces)
         input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
         return input_ids
-    
-    @staticmethod
-    def prepare_training_example(wordpieces, tokens):
-        pass
-        #return bert_idcs, bert_idcs, max_segment
 
     def training_examples(self):
         '''
@@ -125,22 +120,15 @@ class Dependency():
             
             sent_segments = np.zeros((constants.MAX_WORDPIECES,), dtype=np.int64) - 1
             segment_id = 0
-            curr_token = ''
-            for wp_id, wp in enumerate(sent_wordpieces):
-                if wp in ('[CLS]', '[SEP]'):
-                    continue
+            wordpiece_pointer = 1
+            for token in sent_tokens:
+                worpieces_per_token = len(self.tokenizer.tokenize(token, add_special_tokens=False))
+                sent_segments[wordpiece_pointer:wordpiece_pointer+worpieces_per_token] = segment_id
+                wordpiece_pointer += worpieces_per_token
+                segment_id += 1
                     
-                sent_segments[wp_id] = segment_id
-                if wp.startswith('##'):
-                    curr_token += wp[2:]
-                else:
-                    curr_token += wp
-                if unidecode(curr_token).lower() == unidecode(sent_tokens[segment_id]).lower():
-                    segment_id += 1
-                    curr_token = ''
-                    
-            if segment_id != len(sent_tokens):
-                print(f'Sentence {sent_idx} mismatch in number of tokens in file {self.conllu_name}, skipping.')
+            if wordpiece_pointer+1 != len(sent_wordpieces):
+                print(f'Sentence {sent_idx} mismatch in number of tokens, skipped!')
                 indices_to_rm.append(sent_idx)
             else:
                 segments.append(tf.constant(sent_segments, dtype=tf.int64))
