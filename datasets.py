@@ -94,7 +94,7 @@ class DependencyDataset:
 			# the data balanced per language.
 			permutations = {language: language_data.get_permutation(self.size)
 							for language, language_data in self._data.items()}
-			while any(len(permutation) for permutation in permutations.keys()):
+			while any(len(permutation) for permutation in permutations.values()):
 				for language in self._languages:
 					if not len(permutations[language]):
 						continue
