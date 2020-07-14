@@ -21,7 +21,7 @@ if __name__ == "__main__":
 	parser.add_argument("--test-data", nargs='*', type=str, default=None, help="Conllu files for validation")
 	parser.add_argument("--test-languages", nargs='*', type=str, default=None, help="Languages of validation conllu files")
 	# Probe arguments
-	parser.add_argument("--task", default="distance", type=str, help="Probing task (distance or depth)")
+	parser.add_argument("--task", default="distance", type=str, help="Probing task (distance, lex-distance, depth or lex-depth)")
 	parser.add_argument("--bert-dim", default=768, type=int, help="Dimensionality of BERT embeddings")
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
@@ -89,9 +89,9 @@ if __name__ == "__main__":
 	
 	dep_dataset = DependencyDataset(dataset_files, dataset_languages, args.task, args.bert_path, do_lower_case)
 
-	if args.task.lower() == 'distance':
+	if args.task.lower() in ('distance', 'lex-distance'):
 		prober = DistanceProbe(args)
-	elif args.task.lower() == 'depth':
+	elif args.task.lower() in ('depth', 'lex-depth'):
 		prober = DepthProbe(args)
 	else:
 		raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
@@ -105,6 +105,7 @@ if __name__ == "__main__":
 			test_reporter = DistanceReporter(prober, dep_dataset.test, 'test')
 		elif args.task.lower() == 'depth':
 			test_reporter = DepthReporter(prober, dep_dataset.test, 'test')
+
 		else:
 			raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
 

@@ -15,16 +15,22 @@ class Dependency():
         self.tokenizer = bert_tokenizer
 
         self.tokens = []
+        self.lemmas = []
+        self.pos = []
         self.relations = []
         self.roots = []
-        self.punctuation_mask = []
+        self.features = []
 
         self.read_conllu(conll_file)
 
     @property
     def unlabeled_relations(self):
         return [{dep: parent for dep, parent in sent_relation} for sent_relation in self.relations]
-    
+
+    @property
+    def punctuation_mask(self):
+        return [[pos_tag != "PUNCT" for pos_tag in sentence_pos] for sentence_pos in self.pos]
+
     @property
     def unlabeled_unordered_relations(self):
         return [{frozenset((dep, parent)) for dep, parent in sent_relation
@@ -34,21 +40,38 @@ class Dependency():
     @property
     def word_count(self):
         return [len(sent_relation) for sent_relation in self.relations]
+
+    @staticmethod
+    def parse_features(feature_line):
+        feats = dict()
+        if feature_line == '_':
+            return feats
+        for feat in feature_line.split('|'):
+            assert(len(feat.split('=')) == 2), 'Wrong formatting of features!'
+            f_key, f_value = feat.split('=')
+            feats[f_key] = f_value
+        return feats
     
     def remove_indices(self, indices_to_rm):
         if self.tokens:
             self.tokens = [v for i, v in enumerate(self.tokens) if i not in indices_to_rm]
+        if self.lemmas:
+            self.lemmas = [v for i, v in enumerate(self.lemmas) if i not in indices_to_rm]
+        if self.pos:
+            self.pos = [v for i, v in enumerate(self.pos) if i not in indices_to_rm]
         if self.relations:
             self.relations = [v for i, v in enumerate(self.relations) if i not in indices_to_rm]
         if self.roots:
             self.roots = [v for i, v in enumerate(self.roots) if i not in indices_to_rm]
-        if self.punctuation_mask:
-            self.punctuation_mask = [v for i, v in enumerate(self.punctuation_mask) if i not in indices_to_rm]
+        if self.features:
+            self.features = [v for i, v in enumerate(self.features) if i not in indices_to_rm]
 
     def read_conllu(self, conll_file_path):
         sentence_relations = []
         sentence_tokens = []
-        sentence_punctuation_mask = []
+        sentence_lemmas = []
+        sentence_pos = []
+        sentence_features = []
 
         with open(conll_file_path, 'r') as in_conllu:
             sentid = 0
@@ -58,8 +81,13 @@ class Dependency():
                     sentence_relations = []
                     self.tokens.append(sentence_tokens)
                     sentence_tokens = []
-                    self.punctuation_mask.append(sentence_punctuation_mask)
-                    sentence_punctuation_mask = []
+                    self.lemmas.append(sentence_lemmas)
+                    sentence_lemmas = []
+                    self.pos.append(sentence_pos)
+                    sentence_pos = []
+                    self.features.append(sentence_features)
+                    sentence_features = []
+
                     sentid += 1
                 elif line.startswith('#'):
                     continue
@@ -69,13 +97,14 @@ class Dependency():
                         head_id = int(fields[constants.CONLLU_HEAD])
                         dep_id = int(fields[constants.CONLLU_ID])
                         sentence_relations.append((dep_id, head_id))
+                        sentence_features.append(self.parse_features(fields[constants.CONLLU_FEATS]))
 
                         if head_id == 0:
                             self.roots.append(int(fields[constants.CONLLU_ID]))
 
                         sentence_tokens.append(fields[constants.CONLLU_ORTH])
-                        
-                        sentence_punctuation_mask.append(fields[constants.CONLLU_POS] == 'PUNCT')
+                        sentence_lemmas.append(fields[constants.CONLLU_LEMMA])
+                        sentence_pos.append(fields[constants.CONLLU_POS])
 
     def get_bert_ids(self, wordpieces):
         """Token ids from Tokenizer vocab"""
@@ -86,7 +115,6 @@ class Dependency():
     def training_examples(self):
         '''
         Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
-
         :param wordpieces_all: lists of BPE pieces for each sentence
         :return:
             2-D tensor  [num valid sentences, max num wordpieces] bert wordpiece ids,
@@ -146,7 +174,7 @@ class DependencyDistance(Dependency):
     def __init__(self, conll_file, bert_tokenizer):
         super().__init__(conll_file, bert_tokenizer)
 
-    def target_tensor(self):
+    def target_and_mask(self):
         """Computes the distances between all pairs of words; returns them as a torch tensor.
 
         Args:
@@ -155,18 +183,23 @@ class DependencyDistance(Dependency):
           A tensor of shape (sentence_length, sentence_length) of distances
           in the parse tree as specified by the observation annotation.
         """
+        seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
+                       tf.float32)
+        seq_mask = tf.expand_dims(seq_mask, 1)
+        seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
+
         distances = []
         for dependency_tree in self.relations:
-            sentence_length = len(dependency_tree)  # All observation fields must be of same length
+            sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
             sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
             for i in range(sentence_length):
                 for j in range(i, sentence_length):
-                    i_j_distance = DependencyDistance.distance_between_pairs(dependency_tree, i, j)
+                    i_j_distance = self.distance_between_pairs(dependency_tree, i, j)
                     sentence_distances[i, j] = i_j_distance
                     sentence_distances[j, i] = i_j_distance
                     
             distances.append(sentence_distances)
-        return tf.cast(tf.stack(distances), dtype=tf.float32)
+        return tf.cast(tf.stack(distances), dtype=tf.float32), seq_mask
 
     @staticmethod
     def distance_between_pairs(dependency_tree, i, j, head_indices=None):
@@ -220,7 +253,7 @@ class DependencyDepth(Dependency):
     def __init__(self, conll_file, bert_tokenizer):
         super().__init__(conll_file, bert_tokenizer)
         
-    def target_tensor(self):
+    def target_and_mask(self):
         """Computes the depth of each word; returns them as a torch tensor.
 
         Args:
@@ -229,15 +262,18 @@ class DependencyDepth(Dependency):
           A torch tensor of shape (sentence_length,) of depths
           in the parse tree as specified by the observation annotation.
         """
+        seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
+                       tf.float32)
+
         depths = []
         for dependency_tree in self.relations:
-            sentence_length = len(dependency_tree) #All observation fields must be of same length
+            sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
             sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
             for i in range(sentence_length):
-                sentence_depths[i] = DependencyDepth.get_ordering_index(dependency_tree, i)
+                sentence_depths[i] = self.get_ordering_index(dependency_tree, i)
             depths.append(sentence_depths)
         
-        return tf.cast(tf.stack(depths), dtype=tf.float32)
+        return tf.cast(tf.stack(depths), dtype=tf.float32), seq_mask
 
     @staticmethod
     def get_ordering_index(dependency_tree, i, head_indices=None):
@@ -264,3 +300,57 @@ class DependencyDepth(Dependency):
                 length += 1
             else:
                 return length
+
+#TODO: feature distance, decide whether we want to examine this
+# class FeatureDistance(Dependency):
+#
+#     def __init__(self, conll_file, bert_tokenizer):
+#         super().__init__(conll_file, bert_tokenizer)
+#
+#     def target_and_mask(self):
+#         """Computes the edit distances between morphological feuatures ; returns them as a tensor.
+#         Masks tokens whithout any morphologicall features
+#
+#         Returns:
+#           A tensor of shape (num exmaples, sentence_length, sentence_length) of distances
+#           in the parse tree as specified by the observation annotation.
+#         """
+#         distances = []
+#         masks = []
+#
+#         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
+#                        tf.float32)
+#         seq_mask = tf.expand_dims(seq_mask, 1)
+#         seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
+#
+#         for sentence_features in self.features:
+#             sentence_length = len(sentence_features)  # All observation fields must be of same length
+#             sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
+#             sentence_mask = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
+#             for i in range(sentence_length):
+#                 for j in range(i, sentence_length):
+#                     i_j_distance = self.distance_between_pairs(sentence_features, i, j)
+#                     if i_j_distance:
+#                         sentence_distances[i, j] = i_j_distance
+#                         sentence_distances[j, i] = i_j_distance
+#                         sentence_mask[i, j] = 1.
+#                         sentence_mask[j, i] = 1.
+#
+#             distances.append(sentence_distances)
+#             masks.append(sentence_mask)
+#         return tf.cast(tf.stack(distances), dtype=tf.float32), masks * seq_mask
+#
+#     @staticmethod
+#     def distance_between_pairs(sentence_features, i, j):
+#         if not sentence_features[i] or not sentence_features[j]:
+#             return None
+#
+#         i_f_keys = set(sentence_features[i].keys)
+#         j_f_keys = set(sentence_features[j].keys)
+#
+#         shared_feats = 0
+#         for f_key in i_f_keys.intersection(j_f_keys):
+#             if sentence_features[i][f_key] == sentence_features[j][f_key]:
+#                 shared_feats += 1
+#
+#         return 1. - shared_feats / len(i_f_keys.union(j_f_keys))
