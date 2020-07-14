@@ -19,7 +19,6 @@ class DistanceReporter(Reporter):
 	
 	def __init__(self, prober, dataset, dataset_name):
 		super().__init__(prober, dataset, dataset_name)
-		
 		self.uuas = dict()
 		self.sprarman_d = dict()
 	
@@ -74,6 +73,48 @@ class DistanceReporter(Reporter):
 		self.sprarman_d[language](batch_gold, batch_prediction)
 
 
+class LexicalDistanceReporter(Reporter):
+
+	def __init__(self, prober, dataset, dataset_name):
+		super().__init__(prober, dataset, dataset_name)
+
+		self.sprarman_d = dict()
+
+	def write(self, args):
+		for language in self.dataset._languages:
+			prefix = '{}.{}.'.format(self.dataset_name, language)
+
+			with open(os.path.join(args.out_dir, prefix + 'spearman'), 'w') as sperarman_f:
+				for sent_l, val in self.sprarman_d[language].result().items():
+					sperarman_f.write(f'{sent_l}\t{val}\n')
+
+			with open(os.path.join(args.out_dir, prefix + 'spearman_mean'), 'w') as sperarman_mean_f:
+				result = str(np.nanmean(np.fromiter(self.sprarman_d[language].result().values(), dtype=float)))
+				sperarman_mean_f.write(result + '\n')
+
+	def predict(self, args):
+		for language in self.dataset._languages:
+			self.sprarman_d[language] = Spearman()
+			for batch in tqdm(self.dataset.evaluate_batches(language, size=args.batch_size),
+							  desc="Predicting, {}".format(language)):
+				predicted = self.prober.predict_on_batch(batch.wordpieces, batch.segments, batch.token_len,
+														 batch.max_token_len, batch.language)
+				predicted = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
+							 in zip(tf.unstack(predicted), batch.token_len)]
+
+				gold_distances = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
+								  in zip(tf.unstack(batch.target), batch.token_len)]
+
+				mask = [sent_mask.numpy().astype(bool)[:sent_len,:sent_len] for sent_mask, sent_len
+						in zip(tf.unstack(batch.mask), batch.token_len)]
+
+				self.batch_spearman(language, gold_distances, predicted, batch_mask=mask)
+
+	def batch_spearman(self, language, batch_gold, batch_prediction, batch_mask=None):
+
+		self.sprarman_d[language](batch_gold, batch_prediction, batch_mask)
+
+
 class DepthReporter(Reporter):
 	
 	def __init__(self, prober, dataset, dataset_name):
@@ -112,7 +153,6 @@ class DepthReporter(Reporter):
 				self.batch_spearman(language, gold_depths, predicted)
 				
 				self.batch_root_accuracy(language, batch.roots, predicted, batch.punctuation_mask)
-				
 
 	
 	def batch_root_accuracy(self, language, batch_gold, batch_prediction, batch_punctution_mask):

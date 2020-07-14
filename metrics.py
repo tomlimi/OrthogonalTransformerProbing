@@ -89,15 +89,23 @@ class Spearman(Metric):
         
         super().__init__()
 
-    def __call__(self, gold, predicted):
-        for sent_gold, sent_predicted in zip(gold, predicted):
-            self.update_state(sent_gold, sent_predicted)
-            
+    def __call__(self, gold, predicted, mask=None):
+        if mask:
+            for sent_gold, sent_predicted, sent_mask in zip(gold, predicted, mask):
+                self.update_state(sent_gold, sent_predicted, sent_mask)
+        else:
+            for sent_gold, sent_predicted in zip(gold, predicted):
+                self.update_state(sent_gold, sent_predicted)
+
     def reset_state(self):
         self.per_sent_len = defaultdict(list)
 
-    def update_state(self, sent_gold, sent_predicted):
+    def update_state(self, sent_gold, sent_predicted, sent_mask=None):
         sent_len = sent_gold.shape[0]
+        if sent_mask is not None:
+            sent_gold = sent_gold[sent_mask]
+            sent_predicted = sent_predicted[sent_mask]
+
         if self.min_len <= sent_len <= self.max_len:
             rho, _ = stats.spearmanr(sent_gold, sent_predicted, axis=None)
             self.per_sent_len[sent_len].append(rho)
