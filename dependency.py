@@ -175,13 +175,13 @@ class DependencyDistance(Dependency):
         super().__init__(conll_file, bert_tokenizer)
 
     def target_and_mask(self):
-        """Computes the distances between all pairs of words; returns them as a torch tensor.
+        """Computes the distances between all pairs of words; returns them as a tensor.
 
-        Args:
-          observation: a single Observation class for a sentence:
         Returns:
-          A tensor of shape (sentence_length, sentence_length) of distances
-          in the parse tree as specified by the observation annotation.
+          target: A tensor of shape (num_examples, sentence_length, sentence_length) of distances
+          in the parse tree.
+          mask: A tensor of shape (number of examples, sentence_length, sentence_length) specifying which elements of
+          the target should be used during training.
         """
         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
                        tf.float32)
@@ -202,25 +202,23 @@ class DependencyDistance(Dependency):
         return tf.cast(tf.stack(distances), dtype=tf.float32), seq_mask
 
     @staticmethod
-    def distance_between_pairs(dependency_tree, i, j, head_indices=None):
+    def distance_between_pairs(dependency_tree, i, j):
         '''Computes path distance between a pair of words
 
         Args:
           dependency_tree: list of tuples (dependent, head) sorted by dependent indicies.
           i: one of the two words to compute the distance between.
           j: one of the two words to compute the distance between.
-          head_indices: the head indices (according to a dependency parse) of all
-              words, or None, if observation != None.
 
         Returns:
           The integer distance d_path(i,j)
         '''
         if i == j:
             return 0
-        if dependency_tree:
-            head_indices = []
-            for dep, head in dependency_tree:
-                head_indices.append(int(head))
+
+        head_indices = []
+        for dep, head in dependency_tree:
+            head_indices.append(int(head))
         i_path = [i + 1]
         j_path = [j + 1]
         i_head = i + 1
@@ -254,13 +252,12 @@ class DependencyDepth(Dependency):
         super().__init__(conll_file, bert_tokenizer)
         
     def target_and_mask(self):
-        """Computes the depth of each word; returns them as a torch tensor.
+        """Computes the depth of each word; returns them as a tensor.
 
-        Args:
-          observation: a single Observation class for a sentence:
         Returns:
-          A torch tensor of shape (sentence_length,) of depths
-          in the parse tree as specified by the observation annotation.
+          target: A tensor of shape (num_examples, sentence_length,) of depths in the parse tree.
+          mask: A tensor of shape (number of examples, sentence_length) specifying which elements of the target
+          should be used during training.
         """
         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
                        tf.float32)
@@ -276,22 +273,20 @@ class DependencyDepth(Dependency):
         return tf.cast(tf.stack(depths), dtype=tf.float32), seq_mask
 
     @staticmethod
-    def get_ordering_index(dependency_tree, i, head_indices=None):
+    def get_ordering_index(dependency_tree, i):
         '''Computes tree depth for a single word in a sentence
 
         Args:
           dependency_tree: list of tuples (dependent, head) sorted by dependent indicies.
           i: the word in the sentence to compute the depth of
-          head_indices: the head indices (according to a dependency parse) of all
-              words, or None, if observation != None.
 
         Returns:
           The integer depth in the tree of word i
         '''
-        if dependency_tree:
-            head_indices = []
-            for dep, head in dependency_tree:
-                head_indices.append(int(head))
+
+        head_indices = []
+        for dep, head in dependency_tree:
+            head_indices.append(int(head))
         length = 0
         i_head = i+1
         while True:

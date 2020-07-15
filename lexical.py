@@ -16,8 +16,10 @@ class LexicalDistance(Dependency):
         """Computes the distances between all pairs of words; returns them as a tensor.
 
         Returns:
-          A tensor of shape (number of examples sentence_length, sentence_length) of distances
+          target: A tensor of shape (number of examples, sentence_length, sentence_length) of distances
           in the parse tree as specified by the observation annotation.
+          mask: A tensor of shape (number of examples, sentence_length, sentence_length) specifying which elements of
+          the target should be used during training.
         """
         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
                            tf.float32)
@@ -56,13 +58,13 @@ class LexicalDistance(Dependency):
         '''Computes path distance between a pair of words
 
         Args:
-          lemmas: list of lemmas in the sentecne.
-          pos: list of pos tags in the sentence
-          i: one of the two words to compute the distance between.
-          j: one of the two words to compute the distance between.
+          lemma_i: i-th word lemma.
+          lemma_j: j-th word lemma.
+          pos_i: i-th word part of speech tag.
+          pos_j: j-th word part of speech tag.
 
         Returns:
-          The integer distance d_path(i,j)
+          The distance in the WordNet lexical tree d_path(i,j)
         '''
 
         if pos_i not in constants.pos2wnpos or pos_j not in constants.pos2wnpos:
@@ -90,13 +92,13 @@ class LexicalDepth(Dependency):
         super().__init__(conll_file, bert_tokenizer)
 
     def target_and_mask(self):
-        """Computes the depth of each word; returns them as a torch tensor.
+        """Computes the depth of each word; returns them as a tensor.
 
-        Args:
-          observation: a single Observation class for a sentence:
         Returns:
-          A torch tensor of shape (sentence_length,) of depths
+          target: A tensor of shape (number of examples, sentence_length) of depths
           in the parse tree as specified by the observation annotation.
+          mask: A tensor of shape (number of examples, sentence_length) specifying which elements of the target
+          should be used during training.
         """
 
         raise NotImplementedError
