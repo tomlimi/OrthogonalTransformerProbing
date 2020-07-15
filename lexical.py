@@ -50,7 +50,7 @@ class LexicalDistance(Dependency):
             distances.append(sentence_distances)
             masks.append(sentence_mask)
         self.distance_between_pairs.cache_clear()
-        return tf.cast(tf.stack(distances), dtype=tf.float32), masks * seq_mask
+        return tf.cast(tf.stack(distances), dtype=tf.float32), tf.stack(masks) * seq_mask
 
     @staticmethod
     @lru_cache(maxsize=2 ** 14)
@@ -64,7 +64,7 @@ class LexicalDistance(Dependency):
           pos_j: j-th word part of speech tag.
 
         Returns:
-          The distance in the WordNet lexical tree d_path(i,j)
+          The minimal distance in the WordNet lexical tree d_path(i,j)
         '''
 
         if pos_i not in constants.pos2wnpos or pos_j not in constants.pos2wnpos:
@@ -72,18 +72,18 @@ class LexicalDistance(Dependency):
         if not wn.synsets(lemma_i, pos=constants.pos2wnpos[pos_i]) or not wn.synsets(lemma_j, pos=constants.pos2wnpos[pos_j]):
             return None
 
-        similarity = 0.
+        max_similarity = 0.
         # TODO: consider language, maybe use other type of similatity
         for i_synset in wn.synsets(lemma_i, pos=constants.pos2wnpos[pos_i]):
             for j_synset in wn.synsets(lemma_j, pos=constants.pos2wnpos[pos_j]):
                 pair_sim = wn.path_similarity(i_synset, j_synset)
-                if pair_sim and pair_sim > similarity:
-                    similarity = pair_sim
+                if pair_sim and pair_sim > max_similarity:
+                    max_similarity = pair_sim
 
-        if similarity == 0.:
+        if max_similarity == 0.:
             return None
 
-        return 1./similarity
+        return 1./max_similarity
 
 
 class LexicalDepth(Dependency):
@@ -101,17 +101,51 @@ class LexicalDepth(Dependency):
           should be used during training.
         """
 
-        raise NotImplementedError
+        seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
+                           tf.float32)
 
-        # seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
-        #                    tf.float32)
-        #
-        # depths = []
-        # for dependency_tree in self.relations:
-        #     sentence_length = len(dependency_tree)  # All observation fields must be of same length
-        #     sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
-        #     for i in range(sentence_length):
-        #         sentence_depths[i] = self.get_ordering_index(dependency_tree, i)
-        #     depths.append(sentence_depths)
-        #
-        # return tf.cast(tf.stack(depths), dtype=tf.float32), seq_mask
+        depths = []
+        masks = []
+
+        for sentence_pos, sentence_lemmas in zip(self.pos, self.lemmas):
+            sentence_length = min(len(sentence_pos), constants.MAX_TOKENS)  # All observation fields must be of same length
+            sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
+            sentence_mask = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
+            for i in range(sentence_length):
+                i_depth = self.get_ordering_index(sentence_lemmas[i], sentence_pos[i])
+                if i_depth is not None:
+
+                    sentence_depths[i] = i_depth
+                    sentence_mask[i] = 1.
+            depths.append(sentence_depths)
+            masks.append(sentence_mask)
+
+        self.get_ordering_index.cache_clear()
+
+        return tf.cast(tf.stack(depths), dtype=tf.float32), tf.stack(masks) * seq_mask
+
+    @staticmethod
+    @lru_cache(maxsize=2 ** 7)
+    def get_ordering_index(lemma, pos):
+        '''Computes tree depth for a single word in a sentence
+
+        Args:
+          dependency_tree: list of tuples (dependent, head) sorted by dependent indicies.
+          i: the word in the sentence to compute the depth of
+
+        Returns:
+          The minimal integer depth in the WordNet lexical tree of word i
+        '''
+
+        if pos not in constants.pos2wnpos:
+            return None
+
+        if not wn.synsets(lemma, pos=constants.pos2wnpos[pos]):
+            return None
+
+        min_depth = np.inf
+        for synset in wn.synsets(lemma, pos=constants.pos2wnpos[pos]):
+            if synset.min_depth() < min_depth:
+                min_depth = synset.min_depth()
+
+        return min_depth

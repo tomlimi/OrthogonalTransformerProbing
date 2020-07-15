@@ -4,7 +4,7 @@ import json
 
 from datasets import DependencyDataset
 from network import DistanceProbe, DepthProbe
-from reporter import DistanceReporter, DepthReporter, LexicalDistanceReporter
+from reporter import DistanceReporter, DepthReporter, LexicalDistanceReporter, LexicalDepthReporter
 
 import constants
 
@@ -94,7 +94,8 @@ if __name__ == "__main__":
 	elif args.task.lower() in ('depth', 'lex-depth'):
 		prober = DepthProbe(args)
 	else:
-		raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
+		raise ValueError(
+			"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
 
 	if not args.no_training:
 		prober.train(dep_dataset,args)
@@ -108,9 +109,10 @@ if __name__ == "__main__":
 		elif args.task.lower() == 'lex-distance':
 			test_reporter = LexicalDistanceReporter(prober, dep_dataset.test, 'test')
 		elif args.task.lower() == 'lex-depth':
-			raise NotImplementedError
+			test_reporter = LexicalDepthReporter(prober, dep_dataset.test, 'test')
 		else:
-			raise ValueError("Unknow probing task: {} Choose `depth` or `distance`".format(args.task))
+			raise ValueError(
+				"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
 
 		test_reporter.predict(args)
 		test_reporter.write(args)

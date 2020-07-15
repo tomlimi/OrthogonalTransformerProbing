@@ -49,8 +49,8 @@ class DistanceReporter(Reporter):
 				
 				gold_distances = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
 				                  in zip(tf.unstack(batch.target), batch.token_len)]
-				
-				self.batch_spearman(language, gold_distances, predicted)
+
+				self.sprarman_d[language](gold_distances, predicted)
 				
 				self.batch_uuas(language, gold_distances, predicted, batch.punctuation_mask)
 				
@@ -67,10 +67,6 @@ class DistanceReporter(Reporter):
 			min_spanning_tree_gold = sparse.csgraph.minimum_spanning_tree(sent_gold).tocoo()
 			sent_gold = set(map(frozenset, zip(min_spanning_tree_gold.row + 1, min_spanning_tree_gold.col + 1)))
 			self.uuas[language].update_state(sent_gold, sent_predicted)
-	
-	def batch_spearman(self, language, batch_gold, batch_prediction):
-		
-		self.sprarman_d[language](batch_gold, batch_prediction)
 
 
 class LexicalDistanceReporter(Reporter):
@@ -108,11 +104,7 @@ class LexicalDistanceReporter(Reporter):
 				mask = [sent_mask.numpy().astype(bool)[:sent_len,:sent_len] for sent_mask, sent_len
 						in zip(tf.unstack(batch.mask), batch.token_len)]
 
-				self.batch_spearman(language, gold_distances, predicted, batch_mask=mask)
-
-	def batch_spearman(self, language, batch_gold, batch_prediction, batch_mask=None):
-
-		self.sprarman_d[language](batch_gold, batch_prediction, batch_mask)
+				self.sprarman_d[language](gold_distances, predicted, mask)
 
 
 class DepthReporter(Reporter):
@@ -150,8 +142,7 @@ class DepthReporter(Reporter):
 				
 				gold_depths = [sent_gold.numpy()[:sent_len] for sent_gold, sent_len
 				               in zip(tf.unstack(batch.target), batch.token_len)]
-				self.batch_spearman(language, gold_depths, predicted)
-				
+				self.sprarman_n[language](gold_depths, predicted)
 				self.batch_root_accuracy(language, batch.roots, predicted, batch.punctuation_mask)
 
 	
@@ -162,6 +153,42 @@ class DepthReporter(Reporter):
 			batch_non_punct_prediction.append(sent_predicted)
 
 		self.root_acc[language](batch_gold, [sent_predicted.argmin() + 1 for sent_predicted in batch_non_punct_prediction])
-	
-	def batch_spearman(self, language, batch_gold, batch_prediction):
-		self.sprarman_n[language](batch_gold, batch_prediction)
+
+
+class LexicalDepthReporter(Reporter):
+
+	def __init__(self, prober, dataset, dataset_name):
+		super().__init__(prober, dataset, dataset_name)
+
+		self.sprarman_n = dict()
+
+	def write(self, args):
+		for language in self.dataset._languages:
+			prefix = '{}.{}.'.format(self.dataset_name, language)
+
+
+			with open(os.path.join(args.out_dir, prefix + 'spearman'), 'w') as sperarman_f:
+				for sent_l, val in self.sprarman_n[language].result().items():
+					sperarman_f.write(f'{sent_l}\t{val}\n')
+
+			with open(os.path.join(args.out_dir, prefix + 'spearman_mean'), 'w') as sperarman_mean_f:
+				result = str(np.nanmean(np.fromiter(self.sprarman_n[language].result().values(), dtype=float)))
+				sperarman_mean_f.write(result + '\n')
+
+	def predict(self, args):
+		for language in self.dataset._languages:
+			self.sprarman_n[language] = Spearman()
+			for batch in tqdm(self.dataset.evaluate_batches(language, size=args.batch_size),
+			                  desc="Predicting, {}".format(language)):
+				predicted = self.prober.predict_on_batch(batch.wordpieces, batch.segments, batch.token_len,
+				                                         batch.max_token_len, batch.language)
+				predicted = [sent_predicted.numpy()[:sent_len] for sent_predicted, sent_len
+				             in zip(tf.unstack(predicted), batch.token_len)]
+
+				gold_depths = [sent_gold.numpy()[:sent_len] for sent_gold, sent_len
+				               in zip(tf.unstack(batch.target), batch.token_len)]
+
+				mask = [sent_mask.numpy().astype(bool)[:sent_len] for sent_mask, sent_len
+						in zip(tf.unstack(batch.mask), batch.token_len)]
+
+				self.sprarman_n[language](gold_depths, predicted, mask)

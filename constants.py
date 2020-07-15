@@ -13,10 +13,11 @@ CONLLU_HEAD = 6
 CONLLU_LABEL = 7
 
 # WordNet constants
+# we only consider NOUNs and VERBs, because there is no graph structure for other POS
 pos2wnpos = {"NOUN": wn.NOUN,
-             "VERB": wn.VERB,
-             "ADJ": wn.ADJ,
-             "ADV": wn.ADV}
+             "VERB": wn.VERB}
+             # "ADJ": wn.ADJ,
+             # "ADV": wn.ADV}
 
 # BERT model parameters
 LANGUAGE_ENGLISH = "english"
