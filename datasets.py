@@ -69,9 +69,9 @@ class DependencyDataset:
                 elif task.lower() == "depth":
                     dependency_data = DependencyDepth(datafile, tokenizer)
                 elif task.lower() == "lex-distance":
-                    dependency_data = LexicalDistance(datafile, tokenizer)
+                    dependency_data = LexicalDistance(datafile, tokenizer, lang=language)
                 elif task.lower() == 'lex-depth':
-                    dependency_data = LexicalDepth(datafile, tokenizer)
+                    dependency_data = LexicalDepth(datafile, tokenizer, lang=language)
                 else:
                     raise ValueError(
                         "Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(

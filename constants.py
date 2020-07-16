@@ -18,6 +18,8 @@ pos2wnpos = {"NOUN": wn.NOUN,
              "VERB": wn.VERB}
              # "ADJ": wn.ADJ,
              # "ADV": wn.ADV}
+             
+lang2iso = {'en': 'eng', 'es': 'spa', 'fi': 'fin', 'pl': 'pol', 'ar': 'arb', 'id': 'ind', 'zh': 'cmn', 'fr': 'fra'}
 
 # BERT model parameters
 LANGUAGE_ENGLISH = "english"

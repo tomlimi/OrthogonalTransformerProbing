@@ -9,8 +9,11 @@ import constants
 
 class LexicalDistance(Dependency):
 
-    def __init__(self, conll_file, bert_tokenizer):
+    def __init__(self, conll_file, bert_tokenizer, lang='en'):
         super().__init__(conll_file, bert_tokenizer)
+        if lang not in constants.lang2iso:
+            raise ValueError(f'Language {lang} is not supported by Open Multilingual Wordnet')
+        self.iso_lang = constants.lang2iso[lang]
 
     def target_and_mask(self):
         """Computes the distances between all pairs of words; returns them as a tensor.
@@ -52,9 +55,8 @@ class LexicalDistance(Dependency):
         self.distance_between_pairs.cache_clear()
         return tf.cast(tf.stack(distances), dtype=tf.float32), tf.stack(masks) * seq_mask
 
-    @staticmethod
-    @lru_cache(maxsize=2 ** 14)
-    def distance_between_pairs(lemma_i, lemma_j, pos_i, pos_j):
+    @lru_cache(maxsize=1024)
+    def distance_between_pairs(self, lemma_i, lemma_j, pos_i, pos_j):
         '''Computes path distance between a pair of words
 
         Args:
@@ -69,13 +71,14 @@ class LexicalDistance(Dependency):
 
         if pos_i not in constants.pos2wnpos or pos_j not in constants.pos2wnpos:
             return None
-        if not wn.synsets(lemma_i, pos=constants.pos2wnpos[pos_i]) or not wn.synsets(lemma_j, pos=constants.pos2wnpos[pos_j]):
+        if not wn.synsets(lemma_i, pos=constants.pos2wnpos[pos_i], lang=self.iso_lang) or \
+                not wn.synsets(lemma_j, pos=constants.pos2wnpos[pos_j], lang=self.iso_lang):
             return None
 
         max_similarity = 0.
         # TODO: consider language, maybe use other type of similatity
-        for i_synset in wn.synsets(lemma_i, pos=constants.pos2wnpos[pos_i]):
-            for j_synset in wn.synsets(lemma_j, pos=constants.pos2wnpos[pos_j]):
+        for i_synset in wn.synsets(lemma_i, pos=constants.pos2wnpos[pos_i], lang=self.iso_lang):
+            for j_synset in wn.synsets(lemma_j, pos=constants.pos2wnpos[pos_j], lang=self.iso_lang):
                 pair_sim = wn.path_similarity(i_synset, j_synset)
                 if pair_sim and pair_sim > max_similarity:
                     max_similarity = pair_sim
@@ -88,8 +91,11 @@ class LexicalDistance(Dependency):
 
 class LexicalDepth(Dependency):
 
-    def __init__(self, conll_file, bert_tokenizer):
+    def __init__(self, conll_file, bert_tokenizer, lang='en'):
         super().__init__(conll_file, bert_tokenizer)
+        if lang not in constants.lang2iso:
+            raise ValueError(f'Language {lang} is not supported by Open Multilingual Wordnet')
+        self.iso_lang = constants.lang2iso[lang]
 
     def target_and_mask(self):
         """Computes the depth of each word; returns them as a tensor.
@@ -124,9 +130,8 @@ class LexicalDepth(Dependency):
 
         return tf.cast(tf.stack(depths), dtype=tf.float32), tf.stack(masks) * seq_mask
 
-    @staticmethod
-    @lru_cache(maxsize=2 ** 7)
-    def get_ordering_index(lemma, pos):
+    @lru_cache(maxsize=1024)
+    def get_ordering_index(self, lemma, pos):
         '''Computes tree depth for a single word in a sentence
 
         Args:
@@ -140,11 +145,11 @@ class LexicalDepth(Dependency):
         if pos not in constants.pos2wnpos:
             return None
 
-        if not wn.synsets(lemma, pos=constants.pos2wnpos[pos]):
+        if not wn.synsets(lemma, pos=constants.pos2wnpos[pos], lang=self.iso_lang):
             return None
 
         min_depth = np.inf
-        for synset in wn.synsets(lemma, pos=constants.pos2wnpos[pos]):
+        for synset in wn.synsets(lemma, pos=constants.pos2wnpos[pos], lang=self.iso_lang):
             if synset.min_depth() < min_depth:
                 min_depth = synset.min_depth()
 
