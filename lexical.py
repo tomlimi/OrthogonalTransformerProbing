@@ -53,7 +53,7 @@ class LexicalDistance(Dependency):
             distances.append(sentence_distances)
             masks.append(sentence_mask)
         self.distance_between_pairs.cache_clear()
-        return tf.cast(tf.stack(distances), dtype=tf.float32), tf.stack(masks) * seq_mask
+        return distances, np.stack(masks) * seq_mask
 
     @lru_cache(maxsize=1024)
     def distance_between_pairs(self, lemma_i, lemma_j, pos_i, pos_j):
@@ -128,7 +128,7 @@ class LexicalDepth(Dependency):
 
         self.get_ordering_index.cache_clear()
 
-        return tf.cast(tf.stack(depths), dtype=tf.float32), tf.stack(masks) * seq_mask
+        return depths, np.stack(masks) * seq_mask
 
     @lru_cache(maxsize=1024)
     def get_ordering_index(self, lemma, pos):

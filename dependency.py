@@ -166,7 +166,7 @@ class Dependency():
     
         self.remove_indices(indices_to_rm)
         
-        return tf.stack(bert_ids), tf.stack(segments), tf.constant(max_segment)
+        return bert_ids, segments, max_segment
         
     
 class DependencyDistance(Dependency):
@@ -189,7 +189,7 @@ class DependencyDistance(Dependency):
         seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 
         distances = []
-        for dependency_tree in self.relations:
+        for dependency_tree, sentence_mask in zip(self.relations, tf.unstack(seq_mask)):
             sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
             sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
             for i in range(sentence_length):
@@ -198,8 +198,8 @@ class DependencyDistance(Dependency):
                     sentence_distances[i, j] = i_j_distance
                     sentence_distances[j, i] = i_j_distance
                     
-            distances.append(sentence_distances)
-        return tf.cast(tf.stack(distances), dtype=tf.float32), seq_mask
+            #distances.append(sentence_distances)
+            yield sentence_distances, sentence_mask
 
     @staticmethod
     def distance_between_pairs(dependency_tree, i, j):
@@ -263,14 +263,14 @@ class DependencyDepth(Dependency):
                        tf.float32)
 
         depths = []
-        for dependency_tree in self.relations:
+        for dependency_tree, sentence_mask in zip(self.relations, tf.unstack(seq_mask)):
             sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
             sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
             for i in range(sentence_length):
                 sentence_depths[i] = self.get_ordering_index(dependency_tree, i)
             depths.append(sentence_depths)
         
-        return tf.cast(tf.stack(depths), dtype=tf.float32), seq_mask
+            yield sentence_depths, sentence_mask
 
     @staticmethod
     def get_ordering_index(dependency_tree, i):
