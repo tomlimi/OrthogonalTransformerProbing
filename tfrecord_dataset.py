@@ -2,6 +2,7 @@ import argparse
 import os
 
 import tensorflow as tf
+from tqdm import tqdm
 import numpy as np
 from transformers import BertTokenizer, TFBertModel
 
@@ -71,22 +72,26 @@ class Dataset:
             self.language = language
             self.dependency_data = dependency_data
             self.bert_model = bert_model
-            
-            
+
         def calc_embeddings(self, wordpieces, segments):
+            wordpieces = tf.expand_dims(wordpieces, 0)
+            segments = tf.expand_dims(segments, 0)
+            max_token_len = tf.constant(constants.MAX_TOKENS, shape=(1,), dtype=tf.int64)
+
             _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
             embeddings = bert_hidden[1:]
+
             # average wordpieces to obtain word representation
             # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same
             embeddings = [tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
-                                          (embeddings, segments, constants.MAX_TOKENS), dtype=tf.float32) for embeddings in
+                                          (embeddings, segments, max_token_len), dtype=tf.float32) for embeddings in
                                 embeddings]
             return embeddings
 
         @staticmethod
         def serialize_example(embeddings, token_len):
 
-            feature = {f'layer_{idx}': Dataset._float_feature(layer_embeddings)
+            feature = {f'layer_{idx}': Dataset._float_features(layer_embeddings.numpy())
                         for idx, layer_embeddings in enumerate(embeddings)}
 
             feature.update({'num_tokens': Dataset._int64_feature(token_len)})
@@ -95,8 +100,9 @@ class Dataset:
         
         def write_tfrecord(self):
             filename = f'bert_{self.language}'
+            all_wordpieces, all_segments, all_token_len = self.dependency_data.training_examples()
             with tf.io.TFRecordWriter(filename) as writer:
-                for wordpieces, segments, token_len in zip(self.dependency_data.training_examples()):
+                for wordpieces, segments, token_len in tqdm(zip(all_wordpieces, all_segments, all_token_len)):
                     embeddings = self.calc_embeddings(wordpieces, segments)
                     train_example = self.serialize_example(embeddings, token_len)
                     writer.write(train_example.SerializeToString())
