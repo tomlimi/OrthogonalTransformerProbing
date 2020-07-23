@@ -1,13 +1,8 @@
-import argparse
-import os
-
 import tensorflow as tf
 from tqdm import tqdm
-import numpy as np
 from transformers import BertTokenizer, TFBertModel
 
 import constants
-
 from dependency import DependencyDistance, DependencyDepth
 from lexical import LexicalDistance, LexicalDepth
 
@@ -62,8 +57,8 @@ class Dataset:
         @staticmethod
         def parse(example):
             example = tf.io.parse_single_example(example, {
-                "target": tf.io.FixedLenFeature([], tf.float32),
-                "mask": tf.io.FixedLenFeature([], tf.float32)})
+                "target": tf.io.FixedLenFeature([constants.MAX_WORDPIECES], tf.float32),
+                "mask": tf.io.FixedLenFeature([constants.MAX_WORDPIECES], tf.float32)})
 
             # example["image"] = tf.image.convert_image_dtype(tf.image.decode_jpeg(example["image"], channels=3),
             #                                                 tf.float32)
@@ -100,13 +95,23 @@ class Dataset:
 
         @staticmethod
         def serialize_example(embeddings, token_len):
-
-            feature = {f'layer_{idx}': Dataset._float_features(layer_embeddings.numpy())
-                        for idx, layer_embeddings in enumerate(embeddings)}
-
-            feature.update({'num_tokens': Dataset._int64_feature(token_len)})
-
+            feature = {'num_tokens': Dataset._int64_feature(token_len)}
+            feature.update({f'layer_{idx}': Dataset._float_features(layer_embeddings.numpy())
+                        for idx, layer_embeddings in enumerate(embeddings)})
+            
             return tf.train.Example(features=tf.train.Features(feature=feature))
+        
+        @staticmethod
+        def parse(example):
+            
+            features_dict = {"num_tokens": tf.io.FixedLenFeature([1], tf.int64)}
+            features_dict.update({f"layer_{idx}": tf.io.FixedLenFeature([constants.MAX_WORDPIECES,
+                                                                         constants.SIZE_DIMS[constants.SIZE_BASE]],
+                                                                        tf.float32)
+                                                      for idx in range(constants.SIZE_LAYERS[constants.SIZE_BASE])})
+            example = tf.io.parse_single_example(example, features_dict)
+            return example
+        
         
         def write_tfrecord(self):
             filename = f'bert_{self.language}'
@@ -141,15 +146,21 @@ class Dataset:
                 embedding_data = Dataset.EmbeddedData(language, dependency_data, bert_model)
                 embedding_data.write_tfrecord()
 
-    def __init__(self, dataset_files, dataset_languages, dataset_tasks, bert_path, do_lower_case=True):
+    def __init__(self, dataset_files, dataset_languages, dataset_tasks, bert_path, embedding_path=None, do_lower_case=True, read_tfrecord=False):
         assert dataset_files.keys() == dataset_languages.keys(), "Specify the same name of datasets."
 
-        tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=do_lower_case)
-        bert_model = TFBertModel.from_pretrained(bert_path, output_hidden_states=True)
-
-        for dataset_name in dataset_files.keys():
-            self.DatasetWriter(dataset_files[dataset_name],
-                               dataset_languages[dataset_name],
-                               dataset_tasks[dataset_name],
-                               tokenizer,
-                               bert_model)
+        if not read_tfrecord:
+            tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=do_lower_case)
+            bert_model = TFBertModel.from_pretrained(bert_path, output_hidden_states=True)
+    
+            for dataset_name in dataset_files.keys():
+                self.DatasetWriter(dataset_files[dataset_name],
+                                   dataset_languages[dataset_name],
+                                   dataset_tasks[dataset_name],
+                                   tokenizer,
+                                   bert_model)
+                
+        else:
+            for dataset_name, dataset_path in dataset_files.items():
+                setattr(self, dataset_name, tf.data.TFRecordDataset(dataset_path))
+            setattr(self, 'embeddings', tf.data.TFRecordDataset(embedding_path))

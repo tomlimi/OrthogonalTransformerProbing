@@ -2,7 +2,7 @@ import os
 import argparse
 import json
 
-from datasets import DependencyDataset
+from tfrecord_dataset import Dataset
 from network import DistanceProbe, DepthProbe
 from reporter import DistanceReporter, DepthReporter, LexicalDistanceReporter, LexicalDepthReporter
 
@@ -87,7 +87,9 @@ if __name__ == "__main__":
 	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	do_lower_case = (args.casing == "uncased")
 
-	dep_dataset = DependencyDataset(dataset_files, dataset_languages, args.task, args.bert_path, do_lower_case)
+	#TODO: customize this
+	dep_dataset = Dataset(dataset_files, dataset_languages, args.task, args.bert_path,
+	                      embedding_path='bert_en', do_lower_case=do_lower_case, read_tfrecord=True)
 
 	if args.task.lower() in ('distance', 'lex-distance'):
 		prober = DistanceProbe(args)

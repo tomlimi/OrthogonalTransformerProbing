@@ -279,7 +279,6 @@ class DependencyDepth(Dependency):
         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
                        tf.float32)
 
-        depths = []
         for dependency_tree, sentence_mask in zip(self.relations, tf.unstack(seq_mask)):
             sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
             sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)

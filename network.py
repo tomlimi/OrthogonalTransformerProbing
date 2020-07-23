@@ -9,7 +9,7 @@ from tqdm import tqdm
 import numpy as np
 
 import constants
-
+from tfrecord_dataset import Dataset
 
 class Probe():
 
@@ -82,10 +82,28 @@ class Probe():
     def train(self, dep_dataset, args):
         curr_patience = 0
         for epoch_idx in range(args.epochs):
-            progressbar = tqdm(enumerate(dep_dataset.train.train_batches(args.batch_size)))
+            
+            #TODO: read tf record
+            
+            train_target = dep_dataset.train
+            train_target = train_target.map(Dataset.LanguageTaskData.parse)
+            train_embedding = dep_dataset.embeddings
+            train_embedding = train_embedding.map(Dataset.EmbeddedData.parse)
+            
+            train = tf.data.Dataset.zip((train_target, train_embedding))
+            train = train.map(lambda x, y: (x["target"], x["mask"], y["num_tokens"], y[f"layer_{args.layer_index}"]))
+            train = train.shuffle(10, args.seed)
+            train = train.batch(args.batch_size)
+            
+            progressbar = tqdm(enumerate(train))
+
             for batch_idx, batch in progressbar:
-                batch_loss = self._train_fns[batch.language](batch.wordpieces, batch.segments, batch.token_len,
-                                                             batch.max_token_len, batch.target, batch.mask)
+                #TODO: languge and task specify in probes
+                #TODO: there is some problem with tuple here
+                print(batch)
+                batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
+                
+                batch_loss = self._train_fns['en'](batch_target, batch_mask, batch_num_tokens, batch_embeddings)
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
             eval_loss = self.evaluate(dep_dataset.dev, 'validation', args)
@@ -160,20 +178,22 @@ class DistanceProbe(Probe):
         self.checkpoint_manager = tf.train.CheckpointManager(self.ckpt, os.path.join(args.out_dir, 'params'), max_to_keep=1)
 
     @tf.function
-    def _forward(self, wordpieces, segments, max_token_len, language):
+    def _forward(self, embeddings, max_token_len, language):
         """ Computes all n^2 pairs of distances after projection
         for each sentence in a batch.
 
         Note that due to padding, some distances will be non-zero for pads.
         Computes (B(h_i-h_j))^T(B(h_i-h_j)) for all i,j
         """
-        _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
-        embeddings = bert_hidden[self._layer_idx + 1]
+        # _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
+        # embeddings = bert_hidden[self._layer_idx + 1]
         # average wordpieces to obtain word representation
         # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same
-        embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
-                               (embeddings, segments, max_token_len), dtype=tf.float32)
+        # embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
+        #                        (embeddings, segments, max_token_len), dtype=tf.float32)
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
+        
+        embeddings = embeddings[:,:max_token_len,:]
         if self.ml_probe:
             embeddings = embeddings @ self.LanguageMaps[language]
         if self._orthogonal_reg:
@@ -196,10 +216,11 @@ class DistanceProbe(Probe):
         # separate train function is needed to avoid variable creation on non-first call
         # see: https://github.com/tensorflow/tensorflow/issues/27120
         @tf.function(experimental_relax_shapes=True)
-        def train_on_batch(wordpieces, segments, token_len, max_token_len, target, mask):
+        def train_on_batch(embeddings, token_len, target, mask):
 
             with tf.GradientTape() as tape:
-                predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
+                max_token_len = tf.reduce_max(token_len)
+                predicted_distances = self._forward(embeddings, max_token_len, language)
                 loss = self._loss(predicted_distances, target, mask, token_len)
                 if self._orthogonal_reg and self.ml_probe:
                     ortho_penalty = self.ortho_reguralization(self.LanguageMaps[language])
@@ -267,15 +288,17 @@ class DepthProbe(Probe):
         self.checkpoint_manager = tf.train.CheckpointManager(self.ckpt, os.path.join(args.out_dir, 'params'), max_to_keep=1)
 
     @tf.function
-    def _forward(self, wordpieces, segments, max_token_len, language):
+    def _forward(self, embeddings, max_token_len, language):
         """ Computes all n depths after projection for each sentence in a batch.
         Computes (Bh_i)^T(Bh_i) for all i
         """
-        _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
-        embeddings = bert_hidden[self._layer_idx + 1]
-        embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
-                               (embeddings, segments, max_token_len), dtype=tf.float32)
+        # _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
+        # embeddings = bert_hidden[self._layer_idx + 1]
+        # embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
+        #                        (embeddings, segments, max_token_len), dtype=tf.float32)
         #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
+
+        embeddings = embeddings[:, :max_token_len, :]
         if self.ml_probe:
             embeddings = embeddings @ self.LanguageMaps[language]
         if self._orthogonal_reg:
@@ -293,10 +316,11 @@ class DepthProbe(Probe):
 
     def train_factory(self,language):
         @tf.function(experimental_relax_shapes=True)
-        def train_on_batch(wordpieces, segments, token_len, max_token_len, target, mask):
+        def train_on_batch(target, mask, token_len, embeddings):
 
             with tf.GradientTape() as tape:
-                predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
+                max_token_len = tf.reduce_max(token_len)
+                predicted_depths = self._forward(embeddings, max_token_len, language)
                 loss = self._loss(predicted_depths, target, mask, token_len)
                 if self._orthogonal_reg and self.ml_probe:
                     ortho_penalty = self.ortho_reguralization(self.LanguageMaps[language])
