@@ -22,6 +22,7 @@ class Dependency():
         self.features = []
 
         self.read_conllu(conll_file)
+        self.filter_sentences()
 
     @property
     def unlabeled_relations(self):
@@ -111,20 +112,14 @@ class Dependency():
         token_ids = self.tokenizer.convert_tokens_to_ids(wordpieces)
         input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
         return input_ids
-
-    def training_examples(self):
-        '''
-        Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
-        :param wordpieces_all: lists of BPE pieces for each sentence
-        :return:
-            2-D tensor  [num valid sentences, max num wordpieces] bert wordpiece ids,
-            2-D tensor [num valid sentences, max num wordpieces] wordpiece to word segment mappings
-            1-D tensor [num valide sentenes] number of words in each sentence
-        '''
+    
+    def filter_sentences(self):
+        """ Method to filter out sentences that cannot be processed"""
         
         number_examples = len(self.tokens)
         wordpieces = []
         indices_to_rm = []
+        
         for idx, sent_tokens in enumerate(self.tokens[:]):
             sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)), add_special_tokens=False) + ["[SEP]"]
             wordpieces.append(sent_wordpieces)
@@ -136,15 +131,45 @@ class Dependency():
                 print(f"Sentence {idx} too many wordpieces in file {self.conllu_name}, skipping.")
                 indices_to_rm.append(idx)
                 number_examples -= 1
-        
-        segments = []
-        max_segment = []
-        bert_ids = []
+
         sent_idx = 0
         for sent_wordpieces, sent_tokens in zip(wordpieces, self.tokens):
             if sent_idx in indices_to_rm:
                 sent_idx += 1
                 continue
+
+            wordpiece_pointer = 1
+            for token in sent_tokens:
+                worpieces_per_token = len(self.tokenizer.tokenize(token, add_special_tokens=False))
+                wordpiece_pointer += worpieces_per_token
+    
+            if wordpiece_pointer + 1 != len(sent_wordpieces):
+                print(f'Sentence {sent_idx} mismatch in number of tokens, skipped!')
+                indices_to_rm.append(sent_idx)
+            sent_idx += 1
+
+        self.remove_indices(indices_to_rm)
+
+
+    def training_examples(self):
+        '''
+        Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
+        :param wordpieces_all: lists of BPE pieces for each sentence
+        :return:
+            2-D tensor  [num valid sentences, max num wordpieces] bert wordpiece ids,
+            2-D tensor [num valid sentences, max num wordpieces] wordpiece to word segment mappings
+            1-D tensor [num valide sentenes] number of words in each sentence
+        '''
+        
+        wordpieces = []
+        for idx, sent_tokens in enumerate(self.tokens[:]):
+            sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)), add_special_tokens=False) + ["[SEP]"]
+            wordpieces.append(sent_wordpieces)
+        
+        segments = []
+        max_segment = []
+        bert_ids = []
+        for sent_wordpieces, sent_tokens in zip(wordpieces, self.tokens):
             
             sent_segments = np.zeros((constants.MAX_WORDPIECES,), dtype=np.int64) - 1
             segment_id = 0
@@ -154,18 +179,11 @@ class Dependency():
                 sent_segments[wordpiece_pointer:wordpiece_pointer+worpieces_per_token] = segment_id
                 wordpiece_pointer += worpieces_per_token
                 segment_id += 1
-                    
-            if wordpiece_pointer+1 != len(sent_wordpieces):
-                print(f'Sentence {sent_idx} mismatch in number of tokens, skipped!')
-                indices_to_rm.append(sent_idx)
-            else:
-                segments.append(tf.constant(sent_segments, dtype=tf.int64))
-                bert_ids.append(tf.constant(self.get_bert_ids(sent_wordpieces), dtype=tf.int64))
-                max_segment.append(segment_id)
-            sent_idx += 1
+                
+            segments.append(tf.constant(sent_segments, dtype=tf.int64))
+            bert_ids.append(tf.constant(self.get_bert_ids(sent_wordpieces), dtype=tf.int64))
+            max_segment.append(segment_id)
     
-        self.remove_indices(indices_to_rm)
-        
         return bert_ids, segments, max_segment
         
     
@@ -188,7 +206,7 @@ class DependencyDistance(Dependency):
         seq_mask = tf.expand_dims(seq_mask, 1)
         seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 
-        distances = []
+
         for dependency_tree, sentence_mask in zip(self.relations, tf.unstack(seq_mask)):
             sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
             sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
@@ -197,9 +215,8 @@ class DependencyDistance(Dependency):
                     i_j_distance = self.distance_between_pairs(dependency_tree, i, j)
                     sentence_distances[i, j] = i_j_distance
                     sentence_distances[j, i] = i_j_distance
-                    
-            #distances.append(sentence_distances)
-            yield sentence_distances, sentence_mask
+
+            yield sentence_distances, sentence_mask.numpy()
 
     @staticmethod
     def distance_between_pairs(dependency_tree, i, j):
@@ -268,9 +285,8 @@ class DependencyDepth(Dependency):
             sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
             for i in range(sentence_length):
                 sentence_depths[i] = self.get_ordering_index(dependency_tree, i)
-            depths.append(sentence_depths)
         
-            yield sentence_depths, sentence_mask
+            yield sentence_depths, sentence_mask.numpy()
 
     @staticmethod
     def get_ordering_index(dependency_tree, i):

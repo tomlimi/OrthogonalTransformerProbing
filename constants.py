@@ -32,4 +32,7 @@ SIZE_LARGE = "large"
 CASING_CASED = "cased"
 CASING_UNCASED = "uncased"
 
+SIZE_DIMS = {"base": 768,
+             "large": 1024}
+
 BERT_MODEL_DIR = "/net/projects/bert/models/"

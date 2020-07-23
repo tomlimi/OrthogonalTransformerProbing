@@ -52,7 +52,6 @@ class Dataset:
 
         @staticmethod
         def serialize_example(target, mask):
-
             feature = {
                 'target': Dataset._float_features(target),
                 'mask': Dataset._float_features(mask)
@@ -60,11 +59,22 @@ class Dataset:
 
             return tf.train.Example(features=tf.train.Features(feature=feature))
 
+        @staticmethod
+        def parse(example):
+            example = tf.io.parse_single_example(example, {
+                "target": tf.io.FixedLenFeature([], tf.float32),
+                "mask": tf.io.FixedLenFeature([], tf.float32)})
+
+            # example["image"] = tf.image.convert_image_dtype(tf.image.decode_jpeg(example["image"], channels=3),
+            #                                                 tf.float32)
+            # example["mask"] = tf.image.convert_image_dtype(tf.image.decode_png(example["mask"], channels=1), tf.float32)
+            return example
+
         def write_tfrecord(self):
             filename = f'{self.task}_{self.language}'
             with tf.io.TFRecordWriter(filename) as writer:
-                for target, mask in self.dependency_data.target_and_mask():
-                    train_example = self.serialize_example(target, mask.numpy())
+                for target, mask in tqdm(self.dependency_data.target_and_mask(), desc=f"Target vector computation, {self.task}"):
+                    train_example = self.serialize_example(target, mask)
                     writer.write(train_example.SerializeToString())
         
     class EmbeddedData:
@@ -102,7 +112,7 @@ class Dataset:
             filename = f'bert_{self.language}'
             all_wordpieces, all_segments, all_token_len = self.dependency_data.training_examples()
             with tf.io.TFRecordWriter(filename) as writer:
-                for wordpieces, segments, token_len in tqdm(zip(all_wordpieces, all_segments, all_token_len)):
+                for wordpieces, segments, token_len in tqdm(zip(all_wordpieces, all_segments, all_token_len), desc="Embedding computation"):
                     embeddings = self.calc_embeddings(wordpieces, segments)
                     train_example = self.serialize_example(embeddings, token_len)
                     writer.write(train_example.SerializeToString())
