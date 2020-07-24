@@ -37,6 +37,7 @@ class DistanceReporter(Reporter):
 				sperarman_mean_f.write(result+'\n')
 	
 	def predict(self, args):
+		#TODO: change prediction
 		for language in self.dataset._languages:
 			self.uuas[language] = UUAS()
 			self.sprarman_d[language] = Spearman()

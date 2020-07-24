@@ -98,15 +98,13 @@ class Probe():
             progressbar = tqdm(enumerate(train))
 
             for batch_idx, batch in progressbar:
-                #TODO: languge and task specify in probes
-                #TODO: there is some problem with tuple here
-                print(batch)
+
                 batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
                 
                 batch_loss = self._train_fns['en'](batch_target, batch_mask, batch_num_tokens, batch_embeddings)
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
-            eval_loss = self.evaluate(dep_dataset.dev, 'validation', args)
+            eval_loss = self.evaluate(dep_dataset.dev, dep_dataset.embeddings, 'validation', args)
             if eval_loss < self.optimal_loss - self.ES_DELTA:
                 self.optimal_loss = eval_loss
                 self.checkpoint_manager.save()
@@ -127,13 +125,25 @@ class Probe():
             with self._writer.as_default():
                 tf.summary.scalar("train/learning_rate", self._optimizer.learning_rate)
 
-    def evaluate(self, data, data_name, args):
+    def evaluate(self, data, data_embeddings, data_name, args):
         all_losses = np.zeros((len(self.languages)))
         for lang_idx, language in enumerate(self.languages):
-            progressbar = tqdm(enumerate(data.evaluate_batches(language, args.batch_size)))
+
+            eval_target = data
+            eval_target = eval_target.map(Dataset.LanguageTaskData.parse)
+            eval_embedding = data_embeddings
+            eval_embedding = eval_embedding.map(Dataset.EmbeddedData.parse)
+
+            eval = tf.data.Dataset.zip((eval_target, eval_embedding))
+            eval = eval.map(lambda x, y: (x["target"], x["mask"], y["num_tokens"], y[f"layer_{args.layer_index}"]))
+            #train = eval.shuffle(10, args.seed)
+            eval = eval.batch(args.batch_size)
+
+            progressbar = tqdm(enumerate(eval))
             for batch_idx, batch in progressbar:
-                batch_loss = self.evaluate_on_batch(batch.wordpieces, batch.segments, batch.token_len,
-                                                    batch.max_token_len, batch.language, batch.target, batch.mask)
+
+                batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
+                batch_loss = self.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens, batch_embeddings, language)
                 progressbar.set_description(f"Evaluating on {language}, loss: {batch_loss:.4f}")
                 all_losses[lang_idx] += batch_loss
 
@@ -209,7 +219,7 @@ class DistanceProbe(Probe):
 
     @tf.function
     def _loss(self, predicted_distances, gold_distances, mask, token_lens):
-        sentence_loss = tf.reduce_sum(tf.abs(predicted_distances * mask - gold_distances), axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32) ** 2)
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_distances - gold_distances) * mask, axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32) ** 2)
         return tf.reduce_sum(sentence_loss)
 
     def train_factory(self,language):
@@ -220,6 +230,8 @@ class DistanceProbe(Probe):
 
             with tf.GradientTape() as tape:
                 max_token_len = tf.reduce_max(token_len)
+                target = target[:,:max_token_len,:max_token_len]
+                mask = mask[:,:max_token_len,:max_token_len]
                 predicted_distances = self._forward(embeddings, max_token_len, language)
                 loss = self._loss(predicted_distances, target, mask, token_len)
                 if self._orthogonal_reg and self.ml_probe:
@@ -253,14 +265,18 @@ class DistanceProbe(Probe):
         return train_on_batch
 
     @tf.function(experimental_relax_shapes=True)
-    def evaluate_on_batch(self, wordpieces, segments, token_len, max_token_len, language, target, mask):
-        predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
+    def evaluate_on_batch(self, target, mask, token_len, embeddings, language):
+        max_token_len = tf.reduce_max(token_len)
+        target = target[:, :max_token_len, :max_token_len]
+        mask = mask[:, :max_token_len, :max_token_len]
+        predicted_distances = self._forward(embeddings, max_token_len, language)
         loss = self._loss(predicted_distances, target, mask, token_len)
         return loss
     
     @tf.function(experimental_relax_shapes=True)
-    def predict_on_batch(self, wordpieces, segments, token_len, max_token_len, language):
-        predicted_distances = self._forward(wordpieces, segments, max_token_len, language)
+    def predict_on_batch(self, token_len, embeddings, language):
+        max_token_len = tf.reduce_max(token_len)
+        predicted_distances = self._forward(embeddings, max_token_len, language)
         return predicted_distances
 
 
@@ -311,7 +327,7 @@ class DepthProbe(Probe):
 
     @tf.function
     def _loss(self, predicted_depths, gold_depths, mask, token_lens):
-        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths * mask - gold_depths), axis=1) / (tf.cast(token_lens, dtype=tf.float32))
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths) * mask, axis=1) / (tf.cast(token_lens, dtype=tf.float32))
         return tf.reduce_sum(sentence_loss)
 
     def train_factory(self,language):
@@ -320,6 +336,8 @@ class DepthProbe(Probe):
 
             with tf.GradientTape() as tape:
                 max_token_len = tf.reduce_max(token_len)
+                target = target[:,:max_token_len]
+                mask = mask[:,:max_token_len]
                 predicted_depths = self._forward(embeddings, max_token_len, language)
                 loss = self._loss(predicted_depths, target, mask, token_len)
                 if self._orthogonal_reg and self.ml_probe:
@@ -352,12 +370,16 @@ class DepthProbe(Probe):
         return train_on_batch
 
     @tf.function(experimental_relax_shapes=True)
-    def evaluate_on_batch(self, wordpieces, segments, token_len, max_token_len, language, target, mask):
-        predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
+    def evaluate_on_batch(self, target, mask, token_len, embeddings, language):
+        max_token_len = tf.reduce_max(token_len)
+        target = target[:, :max_token_len]
+        mask = mask[:, :max_token_len]
+        predicted_depths = self._forward(embeddings, max_token_len, language)
         loss = self._loss(predicted_depths, target, mask, token_len)
         return loss
     
     @tf.function(experimental_relax_shapes=True)
-    def predict_on_batch(self, wordpieces, segments, token_len, max_token_len, language):
-        predicted_depths = self._forward(wordpieces, segments, max_token_len, language)
+    def predict_on_batch(self, token_len, embeddings, language):
+        max_token_len = tf.reduce_max(token_len)
+        predicted_depths = self._forward(embeddings, max_token_len, language)
         return predicted_depths
