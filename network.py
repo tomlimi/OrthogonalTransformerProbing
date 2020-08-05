@@ -22,8 +22,8 @@ class Probe():
         self.model_dim = args.bert_dim
         self.languages = args.train_languages
 
-        self.bert_model = TFBertModel.from_pretrained(args.bert_path,
-                                                      output_hidden_states=True)
+        # self.bert_model = TFBertModel.from_pretrained(args.bert_path,
+        #                                               output_hidden_states=True)
 
         self.ml_probe = args.ml_probe
 
@@ -85,13 +85,10 @@ class Probe():
             
             #TODO: read tf record
             
-            train_target = dep_dataset.train
-            train_target = train_target.map(Dataset.LanguageTaskData.parse)
-            train_embedding = dep_dataset.embeddings
-            train_embedding = train_embedding.map(Dataset.EmbeddedData.parse)
+            train = dep_dataset.embeddings
+            train = train.map(dep_dataset.parse_factory())
             
-            train = tf.data.Dataset.zip((train_target, train_embedding))
-            train = train.map(lambda x, y: (x["target"], x["mask"], y["num_tokens"], y[f"layer_{args.layer_index}"]))
+            train = train.map(lambda x: (x[f"target_{args.task}"], x[f"mask_{args.task}"], y["num_tokens"], x[f"layer_{args.layer_index}"]))
             train = train.shuffle(10, args.seed)
             train = train.batch(args.batch_size)
             
@@ -219,7 +216,7 @@ class DistanceProbe(Probe):
 
     @tf.function
     def _loss(self, predicted_distances, gold_distances, mask, token_lens):
-        sentence_loss = tf.reduce_sum(tf.abs(predicted_distances - gold_distances) * mask, axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32) ** 2)
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_distances * mask - gold_distances), axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32) ** 2)
         return tf.reduce_sum(sentence_loss)
 
     def train_factory(self,language):
@@ -327,7 +324,7 @@ class DepthProbe(Probe):
 
     @tf.function
     def _loss(self, predicted_depths, gold_depths, mask, token_lens):
-        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths) * mask, axis=1) / (tf.cast(token_lens, dtype=tf.float32))
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths * mask - gold_depths), axis=1) / (tf.cast(token_lens, dtype=tf.float32))
         return tf.reduce_sum(sentence_loss)
 
     def train_factory(self,language):
