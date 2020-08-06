@@ -88,7 +88,7 @@ if __name__ == "__main__":
 	do_lower_case = (args.casing == "uncased")
 
 	#TODO: customize this
-	dep_dataset = Dataset(dataset_files, dataset_languages, args.task, args.bert_path,
+	dep_dataset = Dataset(dataset_files, dataset_languages, {'train': [args.task]}, args.bert_path,
 	                      embedding_path='bert_en', do_lower_case=do_lower_case, read_tfrecord=True)
 
 	if args.task.lower() in ('distance', 'lex-distance'):

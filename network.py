@@ -79,17 +79,16 @@ class Probe():
     def train_factory(self, *args, **kwargs):
         pass
 
-    def train(self, dep_dataset, args):
+    def train(self, dataset, args):
         curr_patience = 0
         for epoch_idx in range(args.epochs):
             
             #TODO: read tf record
             
-            train = dep_dataset.embeddings
-            train = train.map(dep_dataset.parse_factory())
-            
-            train = train.map(lambda x: (x[f"target_{args.task}"], x[f"mask_{args.task}"], y["num_tokens"], x[f"layer_{args.layer_index}"]))
-            train = train.shuffle(10, args.seed)
+            train = dataset.embeddings
+            train = train.map(dataset.parse_factory())
+            train = train.map(lambda x: (x[f"target_{args.task}"], x[f"mask_{args.task}"], x["num_tokens"], x[f"layer_{args.layer_index}"]))
+            train = train.shuffle(100, args.seed)
             train = train.batch(args.batch_size)
             
             progressbar = tqdm(enumerate(train))
@@ -97,11 +96,10 @@ class Probe():
             for batch_idx, batch in progressbar:
 
                 batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
-                
                 batch_loss = self._train_fns['en'](batch_target, batch_mask, batch_num_tokens, batch_embeddings)
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
-            eval_loss = self.evaluate(dep_dataset.dev, dep_dataset.embeddings, 'validation', args)
+            eval_loss = self.evaluate(dataset, 'validation', args)
             if eval_loss < self.optimal_loss - self.ES_DELTA:
                 self.optimal_loss = eval_loss
                 self.checkpoint_manager.save()
@@ -122,18 +120,14 @@ class Probe():
             with self._writer.as_default():
                 tf.summary.scalar("train/learning_rate", self._optimizer.learning_rate)
 
-    def evaluate(self, data, data_embeddings, data_name, args):
+    def evaluate(self, dataset, data_name, args):
         all_losses = np.zeros((len(self.languages)))
         for lang_idx, language in enumerate(self.languages):
+    
+            eval = dataset.embeddings
+            eval = eval.map(dataset.parse_factory())
 
-            eval_target = data
-            eval_target = eval_target.map(Dataset.LanguageTaskData.parse)
-            eval_embedding = data_embeddings
-            eval_embedding = eval_embedding.map(Dataset.EmbeddedData.parse)
-
-            eval = tf.data.Dataset.zip((eval_target, eval_embedding))
-            eval = eval.map(lambda x, y: (x["target"], x["mask"], y["num_tokens"], y[f"layer_{args.layer_index}"]))
-            #train = eval.shuffle(10, args.seed)
+            eval = eval.map(lambda x: (x[f"target_{args.task}"], x[f"mask_{args.task}"], x["num_tokens"], x[f"layer_{args.layer_index}"]))
             eval = eval.batch(args.batch_size)
 
             progressbar = tqdm(enumerate(eval))
@@ -219,11 +213,11 @@ class DistanceProbe(Probe):
         sentence_loss = tf.reduce_sum(tf.abs(predicted_distances * mask - gold_distances), axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32) ** 2)
         return tf.reduce_sum(sentence_loss)
 
-    def train_factory(self,language):
+    def train_factory(self, language):
         # separate train function is needed to avoid variable creation on non-first call
         # see: https://github.com/tensorflow/tensorflow/issues/27120
         @tf.function(experimental_relax_shapes=True)
-        def train_on_batch(embeddings, token_len, target, mask):
+        def train_on_batch(target, mask, token_len, embeddings):
 
             with tf.GradientTape() as tape:
                 max_token_len = tf.reduce_max(token_len)
@@ -257,7 +251,6 @@ class DistanceProbe(Probe):
                 if self.ml_probe:
                     tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
             
-
             return loss
         return train_on_batch
 

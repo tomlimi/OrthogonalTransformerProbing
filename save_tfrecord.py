@@ -18,7 +18,6 @@ if __name__ == "__main__":
 	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	do_lower_case = (args.casing == "uncased")
 
-
 	dataset_files = {'train': args.train_data}
 
 	dataset_languages = {'train': args.train_languages}

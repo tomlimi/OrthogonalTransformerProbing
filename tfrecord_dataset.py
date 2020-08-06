@@ -102,8 +102,8 @@ class Dataset:
                         for idx, layer_embeddings in enumerate(embeddings)})
             
             for task, (target, mask) in task_target_mask.items():
-                    feature.update({f'target_{task}': Dataset._float_features(target),
-                                    f'mask_{task}': Dataset._float_features(mask)})
+                feature.update({f'target_{task}': Dataset._float_features(target),
+                                f'mask_{task}': Dataset._float_features(mask)})
             
             return tf.train.Example(features=tf.train.Features(feature=feature))
         
@@ -115,11 +115,8 @@ class Dataset:
                 for wordpieces, segments, token_len, task_target_mask in \
                         tqdm(zip(all_wordpieces, all_segments, all_token_len, self.target_mask_generators),
                              desc="Embedding computation"):
-                    print(task_target_mask)
-                    print(self.tasks)
                     
                     task_target_mask = {task: (target, mask) for task, (target, mask) in zip(self.tasks, task_target_mask)}
-                    print(task_target_mask)
                     embeddings = self.calc_embeddings(wordpieces, segments)
                     train_example = self.serialize_example(embeddings, token_len, task_target_mask)
                     writer.write(train_example.SerializeToString())
@@ -154,7 +151,6 @@ class Dataset:
         if not read_tfrecord:
             tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=do_lower_case)
             bert_model = TFBertModel.from_pretrained(bert_path, output_hidden_states=True)
-            #bert_model = None
             for dataset_name in dataset_files.keys():
                 self.DatasetWriter(dataset_files[dataset_name],
                                    dataset_languages[dataset_name],
@@ -163,36 +159,32 @@ class Dataset:
                                    bert_model)
                 
         else:
-            for dataset_name, dataset_path in dataset_files.items():
-                setattr(self, dataset_name, tf.data.TFRecordDataset(dataset_path))
             setattr(self, 'embeddings', tf.data.TFRecordDataset(embedding_path))
 
-        def parse_factory(self):
-            @staticmethod
-            def parse(example):
-                features_dict = {"num_tokens": tf.io.FixedLenFeature([1], tf.int64)}
-                features_dict.update({f"layer_{idx}": tf.io.FixedLenFeature([constants.MAX_WORDPIECES,
-                                                                             constants.SIZE_DIMS[constants.SIZE_BASE]],
-                                                                            tf.float32)
-                                      for idx in range(constants.SIZE_LAYERS[constants.SIZE_BASE])})
+    def parse_factory(self):
         
-                for task in self.tasks:
-                    if "depth" in task:
-                        features_dict.update(
-                            {f'target_{task}': tf.io.FixedLenFeature([constants.MAX_WORDPIECES], tf.float32),
-                             f'mask_{task}': tf.io.FixedLenFeature([constants.MAX_WORDPIECES], tf.float32)})
+        def parse(example):
+            features_dict = {"num_tokens": tf.io.FixedLenFeature([1], tf.int64)}
+            features_dict.update({f"layer_{idx}": tf.io.FixedLenFeature([constants.MAX_WORDPIECES,
+                                                                         constants.SIZE_DIMS[constants.SIZE_BASE]],
+                                                                        tf.float32)
+                                  for idx in range(constants.SIZE_LAYERS[constants.SIZE_BASE])})
+            for task in self.tasks:
+                if "depth" in task:
+                    features_dict.update(
+                        {f'target_{task}': tf.io.FixedLenFeature([constants.MAX_WORDPIECES], tf.float32),
+                         f'mask_{task}': tf.io.FixedLenFeature([constants.MAX_WORDPIECES], tf.float32)})
             
-                    elif "distance" in task:
-                        features_dict.update(
-                            {f'target_{task}': tf.io.FixedLenFeature(
-                                [constants.MAX_WORDPIECES, constants.MAX_WORDPIECES], tf.float32),
-                             f'mask_{task}': tf.io.FixedLenFeature([constants.MAX_WORDPIECES, constants.MAX_WORDPIECES],
-                                                                   tf.float32)})
-            
-                    else:
-                        ValueError("Task name not recognized. It needs to contain `depth` or `distance in the name")
+                elif "distance" in task:
+                    features_dict.update(
+                        {f'target_{task}': tf.io.FixedLenFeature([constants.MAX_WORDPIECES, constants.MAX_WORDPIECES],
+                                                                 tf.float32),
+                         f'mask_{task}': tf.io.FixedLenFeature([constants.MAX_WORDPIECES, constants.MAX_WORDPIECES],
+                                                               tf.float32)})
+                else:
+                    ValueError("Task name not recognized. It needs to contain `depth` or `distance in the name")
         
-                example = tf.io.parse_single_example(example, features_dict)
-                return example
+            example = tf.io.parse_single_example(example, features_dict)
+            return example
     
-            return parse
+        return parse
