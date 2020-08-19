@@ -83,11 +83,12 @@ class Probe():
         curr_patience = 0
         for epoch_idx in range(args.epochs):
             
-            #TODO: read tf record
-            
             train = dataset.embeddings
             train = train.map(dataset.parse_factory())
-            train = train.map(lambda x: (x[f"target_{args.task}"], x[f"mask_{args.task}"], x["num_tokens"], x[f"layer_{args.layer_index}"]))
+            train = train.map(lambda x: (tf.io.parse_tensor(x[f"target_{args.task}"],out_type=tf.float32),
+                                         tf.io.parse_tensor(x[f"mask_{args.task}"], out_type=tf.float32),
+                                         x["num_tokens"],
+                                         tf.io.parse_tensor(x[f"layer_{args.layer_index}"], out_type=tf.float32)))
             train = train.shuffle(100, args.seed)
             train = train.batch(args.batch_size)
             
@@ -96,6 +97,7 @@ class Probe():
             for batch_idx, batch in progressbar:
 
                 batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
+                #batch_embeddings = tf.transpose(batch_embeddings, perm=(0,2,1))
                 batch_loss = self._train_fns['en'](batch_target, batch_mask, batch_num_tokens, batch_embeddings)
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
@@ -127,13 +129,18 @@ class Probe():
             eval = dataset.embeddings
             eval = eval.map(dataset.parse_factory())
 
-            eval = eval.map(lambda x: (x[f"target_{args.task}"], x[f"mask_{args.task}"], x["num_tokens"], x[f"layer_{args.layer_index}"]))
+            eval = eval.map(lambda x: (tf.io.parse_tensor(x[f"target_{args.task}"],out_type=tf.float32),
+                                         tf.io.parse_tensor(x[f"mask_{args.task}"], out_type=tf.float32),
+                                         x["num_tokens"],
+                                         tf.io.parse_tensor(x[f"layer_{args.layer_index}"], out_type=tf.float32)))
+
             eval = eval.batch(args.batch_size)
 
             progressbar = tqdm(enumerate(eval))
             for batch_idx, batch in progressbar:
 
                 batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
+                #batch_embeddings = tf.transpose(batch_embeddings, perm=(0, 2, 1))
                 batch_loss = self.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens, batch_embeddings, language)
                 progressbar.set_description(f"Evaluating on {language}, loss: {batch_loss:.4f}")
                 all_losses[lang_idx] += batch_loss

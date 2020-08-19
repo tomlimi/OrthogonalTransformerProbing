@@ -16,7 +16,7 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
-	do_lower_case = (args.casing == "uncased")
+	do_lower_case = (args.casing == constants.CASING_UNCASED)
 
 	dataset_files = {'train': args.train_data}
 
