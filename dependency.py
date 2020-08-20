@@ -19,7 +19,6 @@ class Dependency():
         self.pos = []
         self.relations = []
         self.roots = []
-        self.features = []
 
         self.wordpieces = []
         self.segments = []
@@ -45,17 +44,6 @@ class Dependency():
     @property
     def word_count(self):
         return [len(sent_relation) for sent_relation in self.relations]
-
-    @staticmethod
-    def parse_features(feature_line):
-        feats = dict()
-        if feature_line == '_':
-            return feats
-        for feat in feature_line.split('|'):
-            assert(len(feat.split('=')) == 2), 'Wrong formatting of features!'
-            f_key, f_value = feat.split('=')
-            feats[f_key] = f_value
-        return feats
     
     def remove_indices(self, indices_to_rm):
         if self.tokens:
@@ -68,8 +56,6 @@ class Dependency():
             self.relations = [v for i, v in enumerate(self.relations) if i not in indices_to_rm]
         if self.roots:
             self.roots = [v for i, v in enumerate(self.roots) if i not in indices_to_rm]
-        if self.features:
-            self.features = [v for i, v in enumerate(self.features) if i not in indices_to_rm]
 
     def read_conllu(self, conll_file_path):
         sentence_relations = []
@@ -90,8 +76,6 @@ class Dependency():
                     sentence_lemmas = []
                     self.pos.append(sentence_pos)
                     sentence_pos = []
-                    self.features.append(sentence_features)
-                    sentence_features = []
 
                     sentid += 1
                 elif line.startswith('#'):
@@ -102,7 +86,6 @@ class Dependency():
                         head_id = int(fields[constants.CONLLU_HEAD])
                         dep_id = int(fields[constants.CONLLU_ID])
                         sentence_relations.append((dep_id, head_id))
-                        sentence_features.append(self.parse_features(fields[constants.CONLLU_FEATS]))
 
                         if head_id == 0:
                             self.roots.append(int(fields[constants.CONLLU_ID]))
@@ -110,7 +93,6 @@ class Dependency():
                         sentence_tokens.append(fields[constants.CONLLU_ORTH])
                         sentence_lemmas.append(fields[constants.CONLLU_LEMMA])
                         sentence_pos.append(fields[constants.CONLLU_POS])
-
 
     def get_bert_ids(self, wordpieces):
         """Token ids from Tokenizer vocab"""
@@ -171,9 +153,7 @@ class Dependency():
             sent_idx += 1
         self.remove_indices(indices_to_rm)
 
-        self.wordpieces = bert_ids
-        self.segments = segments
-        self.max_segment = max_segment
+        return tf.stack(bert_ids), tf.stack(segments), tf.constant(max_segment, dtype=tf.int64)
         
     
 class DependencyDistance(Dependency):
@@ -195,11 +175,9 @@ class DependencyDistance(Dependency):
         seq_mask = tf.expand_dims(seq_mask, 1)
         seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 
-
-        for dependency_tree, sentence_mask, sentence_wordpieces, sentence_segments, sentence_max_segment\
-                in zip(self.relations, tf.unstack(seq_mask), self.wordpieces, self.segments, self.max_segment):
+        for dependency_tree, sentence_mask in zip(self.relations, tf.unstack(seq_mask)):
             sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
-            sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32, order="C")
+            sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
             for i in range(sentence_length):
                 for j in range(i, sentence_length):
                     i_j_distance = self.distance_between_pairs(dependency_tree, i, j)
@@ -208,7 +186,7 @@ class DependencyDistance(Dependency):
 
             #sentence_mask = tf.linalg.set_diag(sentence_mask, tf.repeat(0., constants.MAX_TOKENS))
 
-            yield tf.constant(sentence_distances, dtype=tf.float32), sentence_mask, sentence_wordpieces, sentence_segments, sentence_max_segment
+            yield tf.constant(sentence_distances, dtype=tf.float32), sentence_mask
 
     @staticmethod
     def distance_between_pairs(dependency_tree, i, j):
@@ -271,14 +249,13 @@ class DependencyDepth(Dependency):
         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
                        tf.float32)
 
-        for dependency_tree, sentence_mask, sentence_wordpieces, sentence_segments, sentence_max_segment\
-                in zip(self.relations, tf.unstack(seq_mask), self.wordpieces, self.segments, self.max_segment):
+        for dependency_tree, sentence_mask in zip(self.relations, tf.unstack(seq_mask)):
             sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
-            sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32, order='C')
+            sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
             for i in range(sentence_length):
                 sentence_depths[i] = self.get_ordering_index(dependency_tree, i)
         
-            yield tf.constant(sentence_depths, dtype=tf.float32), sentence_mask, sentence_wordpieces, sentence_segments, sentence_max_segment
+            yield tf.constant(sentence_depths, dtype=tf.float32), sentence_mask
 
     @staticmethod
     def get_ordering_index(dependency_tree, i):
@@ -303,57 +280,3 @@ class DependencyDepth(Dependency):
                 length += 1
             else:
                 return length
-
-#TODO: feature distance, decide whether we want to examine this
-# class FeatureDistance(Dependency):
-#
-#     def __init__(self, conll_file, bert_tokenizer):
-#         super().__init__(conll_file, bert_tokenizer)
-#
-#     def target_and_mask(self):
-#         """Computes the edit distances between morphological feuatures ; returns them as a tensor.
-#         Masks tokens whithout any morphologicall features
-#
-#         Returns:
-#           A tensor of shape (num exmaples, sentence_length, sentence_length) of distances
-#           in the parse tree as specified by the observation annotation.
-#         """
-#         distances = []
-#         masks = []
-#
-#         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
-#                        tf.float32)
-#         seq_mask = tf.expand_dims(seq_mask, 1)
-#         seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
-#
-#         for sentence_features in self.features:
-#             sentence_length = len(sentence_features)  # All observation fields must be of same length
-#             sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
-#             sentence_mask = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
-#             for i in range(sentence_length):
-#                 for j in range(i, sentence_length):
-#                     i_j_distance = self.distance_between_pairs(sentence_features, i, j)
-#                     if i_j_distance:
-#                         sentence_distances[i, j] = i_j_distance
-#                         sentence_distances[j, i] = i_j_distance
-#                         sentence_mask[i, j] = 1.
-#                         sentence_mask[j, i] = 1.
-#
-#             distances.append(sentence_distances)
-#             masks.append(sentence_mask)
-#         return tf.cast(tf.stack(distances), dtype=tf.float32), masks * seq_mask
-#
-#     @staticmethod
-#     def distance_between_pairs(sentence_features, i, j):
-#         if not sentence_features[i] or not sentence_features[j]:
-#             return None
-#
-#         i_f_keys = set(sentence_features[i].keys)
-#         j_f_keys = set(sentence_features[j].keys)
-#
-#         shared_feats = 0
-#         for f_key in i_f_keys.intersection(j_f_keys):
-#             if sentence_features[i][f_key] == sentence_features[j][f_key]:
-#                 shared_feats += 1
-#
-#         return 1. - shared_feats / len(i_f_keys.union(j_f_keys))

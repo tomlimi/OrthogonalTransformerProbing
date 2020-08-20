@@ -29,8 +29,7 @@ class LexicalDistance(Dependency):
         seq_mask = tf.expand_dims(seq_mask, 1)
         seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 
-        for sentence_pos, sentence_lemmas, sentence_seq_mask,sentence_wordpieces, sentence_segments, sentence_max_segment\
-                in zip(self.pos, self.lemmas, tf.unstack(seq_mask), self.wordpieces, self.segments, self.max_segment):
+        for sentence_pos, sentence_lemmas, sentence_seq_mask in zip(self.pos, self.lemmas, tf.unstack(seq_mask)):
             sentence_length = min(len(sentence_pos), constants.MAX_TOKENS)  # All observation fields must be of same length
             sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
             sentence_mask = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
@@ -48,7 +47,7 @@ class LexicalDistance(Dependency):
                         sentence_mask[i, j] = 1.
                         sentence_mask[j, i] = 1.
 
-            yield tf.constant(sentence_distances, tf.float32), tf.constant(sentence_mask, tf.float32) * sentence_seq_mask.numpy(), sentence_wordpieces, sentence_segments, sentence_max_segment
+            yield tf.constant(sentence_distances, tf.float32), tf.constant(sentence_mask, tf.float32) * sentence_seq_mask
             
         self.distance_between_pairs.cache_clear()
 
@@ -107,10 +106,8 @@ class LexicalDepth(Dependency):
         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
                            tf.float32)
 
-
-        for sentence_pos, sentence_lemmas, sentence_seq_mask, sentence_seq_mask,sentence_wordpieces, sentence_segments, sentence_max_segment\
-                in zip(self.pos, self.lemmas, tf.unstack(seq_mask), self.wordpieces, self.segments, self.max_segment):
-            sentence_length = min(len(sentence_pos), constants.MAX_TOKENS)  # All observation fields must be of same length
+        for sentence_pos, sentence_lemmas, sentence_seq_mask in zip(self.pos, self.lemmas, tf.unstack(seq_mask)):
+            sentence_length = min(len(sentence_pos), constants.MAX_TOKENS) # All observation fields must be of same length
             sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
             sentence_mask = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
             for i in range(sentence_length):
@@ -120,7 +117,7 @@ class LexicalDepth(Dependency):
                     sentence_depths[i] = i_depth
                     sentence_mask[i] = 1.
 
-            yield tf.constant(sentence_depths, tf.float32), tf.constant(sentence_mask, tf.float32) * sentence_seq_mask, sentence_wordpieces, sentence_segments, sentence_max_segment
+            yield tf.constant(sentence_depths, tf.float32), tf.constant(sentence_mask, tf.float32) * sentence_seq_mask
 
         self.get_ordering_index.cache_clear()
 

@@ -2,7 +2,7 @@ import os
 import argparse
 import json
 
-from tfrecord_dataset import Dataset
+from tfrecord_wrapper import TFRecordReader
 from network import DistanceProbe, DepthProbe
 from reporter import DistanceReporter, DepthReporter, LexicalDistanceReporter, LexicalDepthReporter
 
@@ -88,19 +88,19 @@ if __name__ == "__main__":
 	do_lower_case = (args.casing == "uncased")
 
 	#TODO: customize this
-	dep_dataset = Dataset(dataset_files, dataset_languages, {'train': [args.task]}, args.bert_path,
-	                      embedding_path='bert_en', do_lower_case=do_lower_case, read_tfrecord=True)
+	tf_reader = TFRecordReader('resources/tf_data')
+	tf_reader.read(['dep-distance'], ['en'], args.bert_path)
 
-	if args.task.lower() in ('distance', 'lex-distance'):
+	if args.task.lower() in ('dep-distance', 'lex-distance'):
 		prober = DistanceProbe(args)
-	elif args.task.lower() in ('depth', 'lex-depth'):
+	elif args.task.lower() in ('dep-depth', 'lex-depth'):
 		prober = DepthProbe(args)
 	else:
 		raise ValueError(
 			"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
 
 	if not args.no_training:
-		prober.train(dep_dataset,args)
+		prober.train(tf_reader,args)
 	else:
 		prober.load(args)
 	if args.report:

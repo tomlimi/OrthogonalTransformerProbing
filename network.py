@@ -9,7 +9,7 @@ from tqdm import tqdm
 import numpy as np
 
 import constants
-from tfrecord_dataset import Dataset
+from tfrecord_wrapper import Dataset
 
 class Probe():
 
@@ -79,12 +79,12 @@ class Probe():
     def train_factory(self, *args, **kwargs):
         pass
 
-    def train(self, dataset, args):
+    def train(self, tf_reader, args):
         curr_patience = 0
         for epoch_idx in range(args.epochs):
             
-            train = dataset.embeddings
-            train = train.map(dataset.parse_factory())
+            train = tf_reader.train["en"]["dep-distance"]
+            train = train.map(tf_reader.parse)
             train = train.map(lambda x: (tf.io.parse_tensor(x[f"target_{args.task}"],out_type=tf.float32),
                                          tf.io.parse_tensor(x[f"mask_{args.task}"], out_type=tf.float32),
                                          x["num_tokens"],
@@ -97,11 +97,10 @@ class Probe():
             for batch_idx, batch in progressbar:
 
                 batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
-                #batch_embeddings = tf.transpose(batch_embeddings, perm=(0,2,1))
                 batch_loss = self._train_fns['en'](batch_target, batch_mask, batch_num_tokens, batch_embeddings)
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
-            eval_loss = self.evaluate(dataset, 'validation', args)
+            eval_loss = self.evaluate(tf_reader, 'validation', args)
             if eval_loss < self.optimal_loss - self.ES_DELTA:
                 self.optimal_loss = eval_loss
                 self.checkpoint_manager.save()
@@ -122,12 +121,12 @@ class Probe():
             with self._writer.as_default():
                 tf.summary.scalar("train/learning_rate", self._optimizer.learning_rate)
 
-    def evaluate(self, dataset, data_name, args):
+    def evaluate(self, tf_reader, data_name, args):
         all_losses = np.zeros((len(self.languages)))
         for lang_idx, language in enumerate(self.languages):
     
-            eval = dataset.embeddings
-            eval = eval.map(dataset.parse_factory())
+            eval = tf_reader.dev["en"]["dep-distance"]
+            eval = eval.map(tf_reader.parse)
 
             eval = eval.map(lambda x: (tf.io.parse_tensor(x[f"target_{args.task}"],out_type=tf.float32),
                                          tf.io.parse_tensor(x[f"mask_{args.task}"], out_type=tf.float32),
@@ -140,7 +139,6 @@ class Probe():
             for batch_idx, batch in progressbar:
 
                 batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
-                #batch_embeddings = tf.transpose(batch_embeddings, perm=(0, 2, 1))
                 batch_loss = self.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens, batch_embeddings, language)
                 progressbar.set_description(f"Evaluating on {language}, loss: {batch_loss:.4f}")
                 all_losses[lang_idx] += batch_loss
