@@ -66,3 +66,5 @@ if __name__ == "__main__":
 	else:
 		raise ValueError(
 			"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
+
+	prober.train(tf_reader,args)
