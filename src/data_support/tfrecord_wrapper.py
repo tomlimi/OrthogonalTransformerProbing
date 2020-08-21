@@ -140,7 +140,7 @@ class TFRecordWriter(TFRecordWrapper):
         # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same
         embeddings = [tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                 (emb, segments, max_token_len), dtype=tf.float32) for emb in embeddings]
-        embeddings = [tf.pad(tf.squeeze(emb), [[0, constants.MAX_WORDPIECES - token_len], [0, 0]]) for emb in embeddings]
+        embeddings = [tf.pad(tf.squeeze(emb, axis=[0]), [[0, constants.MAX_WORDPIECES - token_len], [0, 0]]) for emb in embeddings]
         return embeddings
 
     @staticmethod
