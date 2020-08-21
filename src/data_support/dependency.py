@@ -1,8 +1,5 @@
-from collections import defaultdict, OrderedDict
 import numpy as np
 import tensorflow as tf
-
-from unidecode import unidecode
 
 import constants
 
@@ -171,7 +168,7 @@ class DependencyDistance(Dependency):
           the target should be used during training.
         """
         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
-                       tf.float32)
+                           tf.float32)
         seq_mask = tf.expand_dims(seq_mask, 1)
         seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 
@@ -247,7 +244,7 @@ class DependencyDepth(Dependency):
           should be used during training.
         """
         seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
-                       tf.float32)
+                           tf.float32)
 
         for dependency_tree, sentence_mask in zip(self.relations, tf.unstack(seq_mask)):
             sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length

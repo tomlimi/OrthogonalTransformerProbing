@@ -4,7 +4,7 @@ from tqdm import tqdm
 import os
 from scipy import sparse
 
-from metrics import UUAS, RootAcc, Spearman
+from reporting.metrics import UUAS, RootAcc, Spearman
 
 
 class Reporter():
@@ -15,7 +15,7 @@ class Reporter():
 		self.dataset_name = dataset_name
 
 
-class DistanceReporter(Reporter):
+class DependencyDistanceReporter(Reporter):
 	
 	def __init__(self, prober, dataset, dataset_name):
 		super().__init__(prober, dataset, dataset_name)
@@ -43,8 +43,11 @@ class DistanceReporter(Reporter):
 			self.sprarman_d[language] = Spearman()
 			for batch in tqdm(self.dataset.evaluate_batches(language, size=args.batch_size),
 			                  desc="Predicting, {}".format(language)):
+
+
 				predicted = self.prober.predict_on_batch(batch.wordpieces, batch.segments, batch.token_len,
 				                                         batch.max_token_len, batch.language)
+
 				predicted = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
 				             in zip(tf.unstack(predicted), batch.token_len)]
 				
@@ -108,7 +111,7 @@ class LexicalDistanceReporter(Reporter):
 				self.sprarman_d[language](gold_distances, predicted, mask)
 
 
-class DepthReporter(Reporter):
+class DependencyDepthReporter(Reporter):
 	
 	def __init__(self, prober, dataset, dataset_name):
 		super().__init__(prober, dataset, dataset_name)

@@ -1,14 +1,11 @@
-import argparse
-import os
-
 import tensorflow as tf
 import numpy as np
 from transformers import BertTokenizer
 
-import constants
+from src import constants
 
-from dependency import DependencyDistance, DependencyDepth
-from lexical import LexicalDistance, LexicalDepth
+from src.data_support.dependency import DependencyDistance, DependencyDepth
+from src.data_support.lexical import LexicalDistance, LexicalDepth
 
 
 class DependencyDataset:
@@ -17,6 +14,8 @@ class DependencyDataset:
         def __init__(self, language, dependency_data, shuffle_batches=True, seed=42):
             self.language = language
             self.wordpieces, self.segments, self.token_len = dependency_data.training_examples()
+
+            #TODO make compatible with generators
             self.target, self.mask = dependency_data.target_and_mask()
 
             self.roots = dependency_data.roots

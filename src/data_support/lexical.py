@@ -3,7 +3,7 @@ import tensorflow as tf
 from functools import lru_cache
 from nltk.corpus import wordnet as wn
 
-from dependency import Dependency
+from data_support.dependency import Dependency
 import constants
 
 

@@ -8,7 +8,7 @@ from tqdm import tqdm
 import numpy as np
 
 import constants
-from tfrecord_wrapper import TFRecordReader
+from data_support.tfrecord_wrapper import TFRecordReader
 
 class Probe():
 
@@ -18,8 +18,8 @@ class Probe():
 
     def __init__(self, args):
         self.probe_rank = args.probe_rank
-        self.model_dim = args.bert_dim
-        self.languages = args.train_languages
+        self.model_dim = constants.MODEL_DIMS[args.bert_path]
+        self.languages = args.languages
         self.tasks = args.tasks
 
         # self.bert_model = TFBertModel.from_pretrained(args.bert_path,
@@ -86,7 +86,7 @@ class Probe():
         for lang in languages:
             for task in tasks:
 
-                data = tf.data.TFRecordDataset(tf_data[lang][task])
+                data = tf_data[lang][task]
                 data = data.map(TFRecordReader.parse)
                 data = data.map(lambda x: (x["index"],
                                            tf.io.parse_tensor(x[f"target_{task}"], out_type=tf.float32),

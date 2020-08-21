@@ -7,8 +7,8 @@ from collections import defaultdict
 from transformers import BertTokenizer, TFBertModel
 
 import constants
-from dependency import DependencyDistance, DependencyDepth
-from lexical import LexicalDistance, LexicalDepth
+from data_support.dependency import DependencyDistance, DependencyDepth
+from data_support.lexical import LexicalDistance, LexicalDepth
 
 
 conllu_wrappers = {
@@ -24,10 +24,11 @@ class TFRecordWrapper:
     modes = ['train', 'dev', 'test']
     data_map_fn = "data_map.json"
 
-    def __init__(self, tasks, models, languages):
+    def __init__(self, tasks, models, languages, map_conll):
         self.tasks = tasks
         self.models = models
-        self.languages = languages
+        self.languages = list(set(languages))
+        self.map_conll = map_conll
 
 
         self.data_map = dict()
@@ -50,6 +51,7 @@ class TFRecordWrapper:
         out_dict = {"tasks": self.tasks,
                     "models": self.models,
                     "languages": self.languages,
+                    "map_conll": self.map_conll,
                     "data_map": self.data_map}
 
         with open(os.path.join(data_dir,self.data_map_fn), 'w') as out_json:
@@ -64,7 +66,9 @@ class TFRecordWriter(TFRecordWrapper):
         assert {mode for mode, _, _ in mode_language_conll} <= set(self.modes), \
             "Unrecognized dataset mode, use `train`, `dev`, or `test`"
 
-        super().__init__(tasks, models, languages)
+        map_connl = {mode: {lang: conll} for mode, lang, conll in mode_language_conll}
+
+        super().__init__(tasks, models, languages, map_connl)
 
         self.model2tfrs = defaultdict(set)
         self.tfr2tasks = defaultdict(set)
@@ -99,7 +103,8 @@ class TFRecordWriter(TFRecordWrapper):
                 in_datasets = [conllu_wrappers[task](conll_fn, tokenizer) for task in tasks]
                 all_wordpieces, all_segments, all_token_len = in_datasets[0].training_examples()
 
-                with tf.io.TFRecordWriter(os.path.join(data_dir, tfrecord_file)) as tf_writer:
+                options = tf.io.TFRecordOptions(compression_type='GZIP')
+                with tf.io.TFRecordWriter(os.path.join(data_dir, tfrecord_file), options=options) as tf_writer:
                     for idx, (wordpieces, segments, token_len, target_mask) in \
                             tqdm(enumerate(zip(tf.unstack(all_wordpieces), tf.unstack(all_segments), tf.unstack(all_token_len),
                                      self.generate_target_masks(tasks, in_datasets))), desc="Embedding computation"):
@@ -135,7 +140,7 @@ class TFRecordWriter(TFRecordWrapper):
         # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same
         embeddings = [tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                 (emb, segments, max_token_len), dtype=tf.float32) for emb in embeddings]
-        embeddings = [tf.pad(tf.squeeze(emb), [[0, constants.MAX_WORDPIECES - token_len], [0,0]]) for emb in embeddings]
+        embeddings = [tf.pad(tf.squeeze(emb), [[0, constants.MAX_WORDPIECES - token_len], [0, 0]]) for emb in embeddings]
         return embeddings
 
     @staticmethod
@@ -175,7 +180,7 @@ class TFRecordWriter(TFRecordWrapper):
 class TFRecordReader(TFRecordWrapper):
 
     def __init__(self, data_dir, model_name='bert-base-multilingual-uncased'):
-        super().__init__([], [], [])
+        super().__init__([], [], [], None)
         self.data_dir = data_dir
         self.model_name = model_name
         self._from_json(data_dir)
@@ -198,7 +203,9 @@ class TFRecordReader(TFRecordWrapper):
                         raise ValueError(f"Data for this task is not available in the directory: {task}\n"
                                          f" supported languages: {self.tasks}")
                     tfr_fn = os.path.join(self.data_dir, self.data_map[mode][self.model_name][lang][task])
-                    data_set[lang][task] = tfr_fn
+                    data_set[lang][task] = tf.data.TFRecordDataset(tfr_fn,
+                                                                   compression_type='GZIP',
+                                                                   buffer_size=constants.BUFFER_SIZE)
 
             self.__setattr__(mode, data_set)
 
