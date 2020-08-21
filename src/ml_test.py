@@ -4,9 +4,12 @@ import json
 
 from data_support.tfrecord_wrapper import TFRecordReader
 from network import DistanceProbe, DepthProbe
+from reporting.reporter import DependencyDistanceReporter, DependencyDepthReporter
+from reporting.reporter import LexicalDistanceReporter,  LexicalDepthReporter
 
 import constants
 
+#TODO: Reorganize and check reporting!
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	#
@@ -16,48 +19,30 @@ if __name__ == "__main__":
 
 	parser.add_argument("--languages", nargs='*', default=['en'], type=str,
 	                    help="Languages to probe.")
-	parser.add_argument("--tasks", nargs='*', type=str,
+	parser.add_argument("--task", type=str,
 	                    help="Probing tasks (distance, lex-distance, depth or lex-depth)")
-
 	# Probe arguments
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
 	parser.add_argument("--no-ml-probe", action="store_true", help="Resign from ml probe (store false)")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
-	# Train arguments
-	parser.add_argument("--seed", default=42, type=int, help="Seed for variable initialisation")
-	parser.add_argument("--batch-size", default=20, type=int, help="Batch size")
-	parser.add_argument("--epochs", default=40, type=int, help="Maximal number of training epochs")
-	parser.add_argument("--learning-rate", default=0.001, type=float, help="Initial learning rate")
-	parser.add_argument("--ortho", default=None, type=float, help="Orthogonality reguralization (SRIP) for language map matrices.")
-	parser.add_argument("--l2", default=None, type=float, help="L2 reguralization of the weights.")
-	parser.add_argument("--clip-norm", default=None, type=float, help="Clip gradient norm to this value")
 	# Specify Bert Model
 	parser.add_argument("--casing", default=constants.CASING_CASED, help="Bert model casing")
 	parser.add_argument("--language", default=constants.LANGUAGE_MULTILINGUAL, help="Bert model language")
 	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
 
-
-
 	args = parser.parse_args()
-	# compatibility
-	args.ml_probe = not args.no_ml_probe
-
-	if args.json_data:
-		with open(args.json_data, 'r') as data_f:
-			data_map = json.load(data_f)
-		for data_argument, data_value in data_map.items():
-			setattr(args, data_argument, data_value)
-
-	experiment_name = f"task_{'_'.join(args.tasks)}-layer_{args.layer_index}-trainl_{'_'.join(args.languages)}"
-	args.out_dir = os.path.join(args.parent_dir,experiment_name)
-	if not os.path.exists(args.out_dir):
-		os.mkdir(args.out_dir)
 
 	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	do_lower_case = (args.casing == "uncased")
 
 	tf_reader = TFRecordReader(args.data_dir, args.bert_path)
 	tf_reader.read(args.tasks, args.languages)
+
+	if args.json_data:
+		with open(args.json_data, 'r') as data_f:
+			data_map = json.load(data_f)
+		for data_argument, data_value in data_map.items():
+			setattr(args, data_argument, data_value)
 
 	if all(task in ('dep-distance', 'lex-distance') for task in args.tasks):
 		prober = DistanceProbe(args)
@@ -66,3 +51,20 @@ if __name__ == "__main__":
 	else:
 		raise ValueError(
 			"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
+
+	prober.load(args)
+
+	if 'dep-distance' in args.tasks:
+		test_reporter = DependencyDistanceReporter(prober, tf_reader.test, 'test')
+	elif 'dep-depth' in args.tasks:
+		test_reporter = DependencyDepthReporter(prober, tf_reader.test, 'test')
+	elif 'lex-distance' in args.tasks:
+		test_reporter = LexicalDistanceReporter(prober, tf_reader.test, 'test')
+	elif 'lex-depth' in args.tasks:
+		test_reporter = LexicalDepthReporter(prober, tf_reader.test, 'test')
+	else:
+		raise ValueError(
+			"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
+
+	test_reporter.predict(args)
+	test_reporter.write(args)
