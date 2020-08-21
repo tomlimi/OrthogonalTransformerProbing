@@ -29,6 +29,7 @@ class TFRecordWrapper:
         self.models = models
         self.languages = languages
 
+
         self.data_map = dict()
         for mode in self.modes:
             self.data_map[mode] = dict()
@@ -173,32 +174,16 @@ class TFRecordWriter(TFRecordWrapper):
 
 class TFRecordReader(TFRecordWrapper):
 
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, model_name='bert-base-multilingual-uncased'):
         super().__init__([], [], [])
         self.data_dir = data_dir
+        self.model_name = model_name
         self._from_json(data_dir)
-        self.parse = self.parse_factory(self.tasks)
+        TFRecordReader.parse_factory(self.tasks, self.model_name)
 
-    @staticmethod
-    def parse_factory(tasks):
-
-        def parse(example):
-            features_dict = {"num_tokens": tf.io.FixedLenFeature([], tf.int64)}
-            features_dict.update({f"layer_{idx}": tf.io.FixedLenFeature([], tf.string)
-                                  for idx in range(constants.SIZE_LAYERS[constants.SIZE_BASE])})
-            for task in tasks:
-                features_dict.update(
-                    {f'target_{task}': tf.io.FixedLenFeature([], tf.string),
-                     f'mask_{task}': tf.io.FixedLenFeature([], tf.string)})
-
-            example = tf.io.parse_single_example(example, features_dict)
-            return example
-
-        return parse
-
-    def read(self, read_tasks, read_languages, model):
-        if model not in self.models:
-            raise ValueError(f"Data for this model are not available in the directory: {model}\n"
+    def read(self, read_tasks, read_languages):
+        if self.model_name not in self.models:
+            raise ValueError(f"Data for this model are not available in the directory: {self.model_name}\n"
                              f" supported models: {self.models}")
 
         for mode in self.modes:
@@ -212,7 +197,31 @@ class TFRecordReader(TFRecordWrapper):
                     if task not in self.tasks:
                         raise ValueError(f"Data for this task is not available in the directory: {task}\n"
                                          f" supported languages: {self.tasks}")
-                    tfr_fn = os.path.join(self.data_dir, self.data_map[mode][model][lang][task])
-                    data_set[lang][task] = tf.data.TFRecordDataset(tfr_fn)
+                    tfr_fn = os.path.join(self.data_dir, self.data_map[mode][self.model_name][lang][task])
+                    data_set[lang][task] = tfr_fn
 
             self.__setattr__(mode, data_set)
+
+    @staticmethod
+    def parse(example):
+        pass
+
+    @classmethod
+    def parse_factory(cls, tasks, model_name):
+
+        def parse(example):
+            features_dict = {"num_tokens": tf.io.FixedLenFeature([], tf.int64),
+                             "index": tf.io.FixedLenFeature([], tf.int64)}
+            features_dict.update({f"layer_{idx}": tf.io.FixedLenFeature([], tf.string)
+                                  for idx in range(constants.MODEL_LAYERS[model_name])})
+            for task in tasks:
+                features_dict.update(
+                    {f'target_{task}': tf.io.FixedLenFeature([], tf.string),
+                     f'mask_{task}': tf.io.FixedLenFeature([], tf.string)})
+
+            example = tf.io.parse_single_example(example, features_dict)
+
+            return example
+
+        cls.parse = parse
+

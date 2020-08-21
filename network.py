@@ -2,14 +2,13 @@
 import os
 
 import tensorflow as tf
-from transformers import TFBertModel
 from abc import abstractmethod
 
 from tqdm import tqdm
 import numpy as np
 
 import constants
-from tfrecord_wrapper import Dataset
+from tfrecord_wrapper import TFRecordReader
 
 class Probe():
 
@@ -21,6 +20,7 @@ class Probe():
         self.probe_rank = args.probe_rank
         self.model_dim = args.bert_dim
         self.languages = args.train_languages
+        self.tasks = args.tasks
 
         # self.bert_model = TFBertModel.from_pretrained(args.bert_path,
         #                                               output_hidden_states=True)
@@ -79,28 +79,44 @@ class Probe():
     def train_factory(self, *args, **kwargs):
         pass
 
+    @staticmethod
+    def data_pipeline(tf_data, languages, tasks, args):
+
+        datasets_to_interleve = []
+        for lang in languages:
+            for task in tasks:
+
+                data = tf.data.TFRecordDataset(tf_data[lang][task])
+                data = data.map(TFRecordReader.parse)
+                data = data.map(lambda x: (x["index"],
+                                           tf.io.parse_tensor(x[f"target_{task}"], out_type=tf.float32),
+                                           tf.io.parse_tensor(x[f"mask_{task}"], out_type=tf.float32),
+                                           x["num_tokens"],
+                                           tf.io.parse_tensor(x[f"layer_{args.layer_index}"], out_type=tf.float32)))
+                data = data.shuffle(100, args.seed)
+                data = data.batch(args.batch_size)
+                data = data.map(lambda *x: (lang, task, x))
+                datasets_to_interleve.append(data)
+
+        return tf.data.experimental.sample_from_datasets(datasets_to_interleve)
+
     def train(self, tf_reader, args):
         curr_patience = 0
         for epoch_idx in range(args.epochs):
-            
-            train = tf_reader.train["en"]["dep-distance"]
-            train = train.map(tf_reader.parse)
-            train = train.map(lambda x: (tf.io.parse_tensor(x[f"target_{args.task}"],out_type=tf.float32),
-                                         tf.io.parse_tensor(x[f"mask_{args.task}"], out_type=tf.float32),
-                                         x["num_tokens"],
-                                         tf.io.parse_tensor(x[f"layer_{args.layer_index}"], out_type=tf.float32)))
-            train = train.shuffle(100, args.seed)
-            train = train.batch(args.batch_size)
-            
+
+            train = self.data_pipeline(tf_reader.train, self.languages, self.tasks, args)
             progressbar = tqdm(enumerate(train))
 
-            for batch_idx, batch in progressbar:
+            for batch_idx, (lang, task, batch) in progressbar:
+                lang = lang.numpy().decode()
+                task = task.numpy().decode()
 
-                batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
-                batch_loss = self._train_fns['en'](batch_target, batch_mask, batch_num_tokens, batch_embeddings)
+                _, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
+
+                batch_loss = self._train_fns[lang][task](batch_target, batch_mask, batch_num_tokens, batch_embeddings)
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
-            eval_loss = self.evaluate(tf_reader, 'validation', args)
+            eval_loss = self.evaluate(tf_reader.dev, 'validation', args)
             if eval_loss < self.optimal_loss - self.ES_DELTA:
                 self.optimal_loss = eval_loss
                 self.checkpoint_manager.save()
@@ -121,33 +137,28 @@ class Probe():
             with self._writer.as_default():
                 tf.summary.scalar("train/learning_rate", self._optimizer.learning_rate)
 
-    def evaluate(self, tf_reader, data_name, args):
-        all_losses = np.zeros((len(self.languages)))
+    def evaluate(self, data, data_name, args):
+        all_losses = np.zeros((len(self.languages), len(self.tasks)))
         for lang_idx, language in enumerate(self.languages):
-    
-            eval = tf_reader.dev["en"]["dep-distance"]
-            eval = eval.map(tf_reader.parse)
+            for task_idx, task in enumerate(self.tasks):
+                eval = self.data_pipeline(data, [language], [task],args)
 
-            eval = eval.map(lambda x: (tf.io.parse_tensor(x[f"target_{args.task}"],out_type=tf.float32),
-                                         tf.io.parse_tensor(x[f"mask_{args.task}"], out_type=tf.float32),
-                                         x["num_tokens"],
-                                         tf.io.parse_tensor(x[f"layer_{args.layer_index}"], out_type=tf.float32)))
+                progressbar = tqdm(enumerate(eval))
+                for batch_idx, (lang2, task2, batch) in progressbar:
+                    assert language == lang2.numpy().decode()
+                    assert task == task2.numpy().decode()
 
-            eval = eval.batch(args.batch_size)
+                    _, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
+                    batch_loss = self.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens, batch_embeddings,
+                                                        language, task)
+                    progressbar.set_description(f"Evaluating on {language} {task} loss: {batch_loss:.4f}")
+                    all_losses[lang_idx][task_idx] += batch_loss
 
-            progressbar = tqdm(enumerate(eval))
-            for batch_idx, batch in progressbar:
+                all_losses[lang_idx][task_idx] = all_losses[lang_idx][task_idx] / (batch_idx + 1.)
+                with self._writer.as_default():
+                    tf.summary.scalar("{}/loss_{}_{}".format(data_name, language, task), all_losses[lang_idx][task_idx])
 
-                batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
-                batch_loss = self.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens, batch_embeddings, language)
-                progressbar.set_description(f"Evaluating on {language}, loss: {batch_loss:.4f}")
-                all_losses[lang_idx] += batch_loss
-
-            all_losses[lang_idx] = all_losses[lang_idx] / (batch_idx + 1.)
-            with self._writer.as_default():
-                tf.summary.scalar("{}/loss_{}".format(data_name, language), all_losses[lang_idx])
-                
-            print(f'{data_name} loss on {language} : {all_losses[lang_idx]:.4f}')
+                print(f'{data_name} loss on {language} {task} : {all_losses[lang_idx][task_idx]:.4f}')
             
         with self._writer.as_default():
             tf.summary.scalar("{}/loss".format(data_name), all_losses.mean())
@@ -170,42 +181,39 @@ class DistanceProbe(Probe):
         
         if self._orthogonal_reg:
             # if orthogonalization is used multilingual probe is only diagonal scaling
-            self.DistanceProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
-                                             ((1, self.probe_rank,)),
-                                             trainable=True, name='distance_probe', dtype=tf.float32)
+            self.DistanceProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
+                                                    ((1, self.probe_rank,)),
+                                                    trainable=True, name=f'distance_probe_{task}', dtype=tf.float32)
+                                  for task in self.tasks}
         else:
-            self.DistanceProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
-                                             ((self.probe_rank, self.probe_rank)),
-                                             trainable=True, name='distance_probe', dtype=tf.float32)
-        self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
+            self.DistanceProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
+                                                    ((self.probe_rank, self.probe_rank)),
+                                                    trainable=True, name='distance_probe', dtype=tf.float32)
+                                  for task in self.tasks}
+        self._train_fns = {lang: {task: self.train_factory(lang, task)
+                                  for task in self.tasks}
+                           for lang in self.languages}
         
         #Checkpoint managment:
         self.ckpt = tf.train.Checkpoint(optimizer=self._optimizer, distance_probe=self.DistanceProbe, **self.LanguageMaps)
         self.checkpoint_manager = tf.train.CheckpointManager(self.ckpt, os.path.join(args.out_dir, 'params'), max_to_keep=1)
 
     @tf.function
-    def _forward(self, embeddings, max_token_len, language):
+    def _forward(self, embeddings, max_token_len, language, task):
         """ Computes all n^2 pairs of distances after projection
         for each sentence in a batch.
 
         Note that due to padding, some distances will be non-zero for pads.
         Computes (B(h_i-h_j))^T(B(h_i-h_j)) for all i,j
         """
-        # _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
-        # embeddings = bert_hidden[self._layer_idx + 1]
-        # average wordpieces to obtain word representation
-        # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same
-        # embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
-        #                        (embeddings, segments, max_token_len), dtype=tf.float32)
-        #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
-        
+
         embeddings = embeddings[:,:max_token_len,:]
         if self.ml_probe:
             embeddings = embeddings @ self.LanguageMaps[language]
         if self._orthogonal_reg:
-            embeddings = embeddings * self.DistanceProbe
+            embeddings = embeddings * self.DistanceProbe[task]
         else:
-            embeddings = embeddings @ self.DistanceProbe
+            embeddings = embeddings @ self.DistanceProbe[task]
         
         embeddings = tf.expand_dims(embeddings, 1)  # shape [batch, 1, seq_len, emb_dim]
         transposed_embeddings = tf.transpose(embeddings, perm=(0, 2, 1, 3))  # shape [batch, seq_len, 1, emb_dim]
@@ -215,10 +223,11 @@ class DistanceProbe(Probe):
 
     @tf.function
     def _loss(self, predicted_distances, gold_distances, mask, token_lens):
-        sentence_loss = tf.reduce_sum(tf.abs(predicted_distances * mask - gold_distances), axis=[1,2]) / (tf.cast(token_lens, dtype=tf.float32) ** 2)
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_distances - gold_distances) * mask, axis=[1,2]) / \
+                        tf.clip_by_value(tf.reduce_sum(mask, axis=[1,2]), 1., constants.MAX_TOKENS ** 2.)
         return tf.reduce_sum(sentence_loss)
 
-    def train_factory(self, language):
+    def train_factory(self, language, task):
         # separate train function is needed to avoid variable creation on non-first call
         # see: https://github.com/tensorflow/tensorflow/issues/27120
         @tf.function(experimental_relax_shapes=True)
@@ -228,19 +237,19 @@ class DistanceProbe(Probe):
                 max_token_len = tf.reduce_max(token_len)
                 target = target[:,:max_token_len,:max_token_len]
                 mask = mask[:,:max_token_len,:max_token_len]
-                predicted_distances = self._forward(embeddings, max_token_len, language)
+                predicted_distances = self._forward(embeddings, max_token_len, language, task)
                 loss = self._loss(predicted_distances, target, mask, token_len)
                 if self._orthogonal_reg and self.ml_probe:
                     ortho_penalty = self.ortho_reguralization(self.LanguageMaps[language])
                     loss += self._orthogonal_reg * ortho_penalty
                 if self._l2_reg:
                     loss += self._l2_reg * tf.norm(self.LanguageMaps[language])
-                    loss += self._l2_reg * tf.norm(self.DistanceProbe)
+                    loss += self._l2_reg * tf.norm(self.DistanceProbe[task])
 
             if self.ml_probe:
-                variables = [self.DistanceProbe, self.LanguageMaps[language]]
+                variables = [self.DistanceProbe[task], self.LanguageMaps[language]]
             else:
-                variables = [self.DistanceProbe]
+                variables = [self.DistanceProbe[task]]
             gradients = tape.gradient(loss, variables)
             gradient_norms = [tf.norm(grad) for grad in gradients]
             if self._clip_norm:
@@ -260,18 +269,18 @@ class DistanceProbe(Probe):
         return train_on_batch
 
     @tf.function(experimental_relax_shapes=True)
-    def evaluate_on_batch(self, target, mask, token_len, embeddings, language):
+    def evaluate_on_batch(self, target, mask, token_len, embeddings, language, task):
         max_token_len = tf.reduce_max(token_len)
         target = target[:, :max_token_len, :max_token_len]
         mask = mask[:, :max_token_len, :max_token_len]
-        predicted_distances = self._forward(embeddings, max_token_len, language)
+        predicted_distances = self._forward(embeddings, max_token_len, language, task)
         loss = self._loss(predicted_distances, target, mask, token_len)
         return loss
     
     @tf.function(experimental_relax_shapes=True)
-    def predict_on_batch(self, token_len, embeddings, language):
+    def predict_on_batch(self, token_len, embeddings, language, task):
         max_token_len = tf.reduce_max(token_len)
-        predicted_distances = self._forward(embeddings, max_token_len, language)
+        predicted_distances = self._forward(embeddings, max_token_len, language, task)
         return predicted_distances
 
 
@@ -292,40 +301,37 @@ class DepthProbe(Probe):
                                           ((self.probe_rank, self.model_dim)),
                                           trainable=True, name='depth_probe', dtype=tf.float32)
             
-        self._train_fns = {lang: self.train_factory(lang) for lang in self.languages}
+        self._train_fns = {lang: {task: self.train_factory(lang, task)
+                                  for task in self.tasks}
+                           for lang in self.languages}
 
         # Checkpoint managment:
         self.ckpt = tf.train.Checkpoint(optimizer=self._optimizer, depth_probe=self.DepthProbe, **self.LanguageMaps)
         self.checkpoint_manager = tf.train.CheckpointManager(self.ckpt, os.path.join(args.out_dir, 'params'), max_to_keep=1)
 
     @tf.function
-    def _forward(self, embeddings, max_token_len, language):
+    def _forward(self, embeddings, max_token_len, language, task):
         """ Computes all n depths after projection for each sentence in a batch.
         Computes (Bh_i)^T(Bh_i) for all i
         """
-        # _, _, bert_hidden = self.bert_model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
-        # embeddings = bert_hidden[self._layer_idx + 1]
-        # embeddings = tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
-        #                        (embeddings, segments, max_token_len), dtype=tf.float32)
-        #embeddings = tf.reshape(embeddings, [embeddings.shape[0], max_token_len[0], embeddings.shape[2]])
-
         embeddings = embeddings[:, :max_token_len, :]
         if self.ml_probe:
             embeddings = embeddings @ self.LanguageMaps[language]
         if self._orthogonal_reg:
-            embeddings = embeddings * self.DepthProbe
+            embeddings = embeddings * self.DepthProbe[task]
         else:
-            embeddings = embeddings @ self.DepthProbe
+            embeddings = embeddings @ self.DepthProbe[task]
 
         squared_norms = tf.norm(embeddings, ord='euclidean', axis=2) ** 2
         return squared_norms
 
     @tf.function
     def _loss(self, predicted_depths, gold_depths, mask, token_lens):
-        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths * mask - gold_depths), axis=1) / (tf.cast(token_lens, dtype=tf.float32))
+        sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths) * mask, axis=1) / \
+                        tf.clip_by_value(tf.reduce_sum(mask, axis=1), 1., constants.MAX_TOKENS)
         return tf.reduce_sum(sentence_loss)
 
-    def train_factory(self,language):
+    def train_factory(self, language, task):
         @tf.function(experimental_relax_shapes=True)
         def train_on_batch(target, mask, token_len, embeddings):
 
@@ -333,19 +339,19 @@ class DepthProbe(Probe):
                 max_token_len = tf.reduce_max(token_len)
                 target = target[:,:max_token_len]
                 mask = mask[:,:max_token_len]
-                predicted_depths = self._forward(embeddings, max_token_len, language)
+                predicted_depths = self._forward(embeddings, max_token_len, language, task)
                 loss = self._loss(predicted_depths, target, mask, token_len)
                 if self._orthogonal_reg and self.ml_probe:
                     ortho_penalty = self.ortho_reguralization(self.LanguageMaps[language])
                     loss += self._orthogonal_reg * ortho_penalty
                 if self._l2_reg:
                     loss += self._l2_reg * tf.norm(self.LanguageMaps[language])
-                    loss += self._l2_reg * tf.norm(self.DepthProbe)
+                    loss += self._l2_reg * tf.norm(self.DepthProbe[task])
 
             if self.ml_probe:
-                variables = [self.DepthProbe, self.LanguageMaps[language]]
+                variables = [self.DepthProbe[task], self.LanguageMaps[language]]
             else:
-                variables = [self.DepthProbe]
+                variables = [self.DepthProbe[task]]
             gradients = tape.gradient(loss, variables)
             gradient_norms = [tf.norm(grad) for grad in gradients]
             if self._clip_norm:
@@ -365,16 +371,16 @@ class DepthProbe(Probe):
         return train_on_batch
 
     @tf.function(experimental_relax_shapes=True)
-    def evaluate_on_batch(self, target, mask, token_len, embeddings, language):
+    def evaluate_on_batch(self, target, mask, token_len, embeddings, language, task):
         max_token_len = tf.reduce_max(token_len)
         target = target[:, :max_token_len]
         mask = mask[:, :max_token_len]
-        predicted_depths = self._forward(embeddings, max_token_len, language)
+        predicted_depths = self._forward(embeddings, max_token_len, language, task)
         loss = self._loss(predicted_depths, target, mask, token_len)
         return loss
     
     @tf.function(experimental_relax_shapes=True)
-    def predict_on_batch(self, token_len, embeddings, language):
+    def predict_on_batch(self, token_len, embeddings, language, task):
         max_token_len = tf.reduce_max(token_len)
-        predicted_depths = self._forward(embeddings, max_token_len, language)
+        predicted_depths = self._forward(embeddings, max_token_len, language, task)
         return predicted_depths

@@ -21,7 +21,7 @@ if __name__ == "__main__":
 	parser.add_argument("--test-data", nargs='*', type=str, default=None, help="Conllu files for validation")
 	parser.add_argument("--test-languages", nargs='*', type=str, default=None, help="Languages of validation conllu files")
 	# Probe arguments
-	parser.add_argument("--task", default="distance", type=str, help="Probing task (distance, lex-distance, depth or lex-depth)")
+	parser.add_argument("--tasks", nargs='*', type=str, help="Probing task (distance, lex-distance, depth or lex-depth)")
 	parser.add_argument("--bert-dim", default=768, type=int, help="Dimensionality of BERT embeddings")
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 	if not (args.train_data and args.train_languages and args.dev_data and args.dev_languages and args.test_data and args.test_languages):
 		raise ValueError("Train/dev/test data and languages need to be provided in json or arguments.")
 
-	experiment_name = f"task_{args.task.lower()}-layer_{args.layer_index}-trainl_{'_'.join(args.train_languages)}"
+	experiment_name = f"task_{'_'.join(args.tasks)}-layer_{args.layer_index}-trainl_{'_'.join(args.train_languages)}"
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
 	if not os.path.exists(args.out_dir):
 		os.mkdir(args.out_dir)
@@ -88,12 +88,12 @@ if __name__ == "__main__":
 	do_lower_case = (args.casing == "uncased")
 
 	#TODO: customize this
-	tf_reader = TFRecordReader('resources/tf_data')
-	tf_reader.read(['dep-distance'], ['en'], args.bert_path)
+	tf_reader = TFRecordReader('resources/tf_data', args.bert_path)
+	tf_reader.read(args.tasks, args.train_languages)
 
-	if args.task.lower() in ('dep-distance', 'lex-distance'):
+	if all( task in ('dep-distance', 'lex-distance') for task in args.tasks):
 		prober = DistanceProbe(args)
-	elif args.task.lower() in ('dep-depth', 'lex-depth'):
+	elif all(task in ('dep-depth', 'lex-depth') for task in args.tasks):
 		prober = DepthProbe(args)
 	else:
 		raise ValueError(
@@ -101,20 +101,20 @@ if __name__ == "__main__":
 
 	if not args.no_training:
 		prober.train(tf_reader,args)
-	else:
-		prober.load(args)
-	if args.report:
-		if args.task.lower() == 'distance':
-			test_reporter = DistanceReporter(prober, dep_dataset.test, 'test')
-		elif args.task.lower() == 'depth':
-			test_reporter = DepthReporter(prober, dep_dataset.test, 'test')
-		elif args.task.lower() == 'lex-distance':
-			test_reporter = LexicalDistanceReporter(prober, dep_dataset.test, 'test')
-		elif args.task.lower() == 'lex-depth':
-			test_reporter = LexicalDepthReporter(prober, dep_dataset.test, 'test')
-		else:
-			raise ValueError(
-				"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
-
-		test_reporter.predict(args)
-		test_reporter.write(args)
+	# else:
+	# 	prober.load(args)
+	# if args.report:
+	# 	if args.task.lower() == 'distance':
+	# 		test_reporter = DistanceReporter(prober, dep_dataset.test, 'test')
+	# 	elif args.task.lower() == 'depth':
+	# 		test_reporter = DepthReporter(prober, dep_dataset.test, 'test')
+	# 	elif args.task.lower() == 'lex-distance':
+	# 		test_reporter = LexicalDistanceReporter(prober, dep_dataset.test, 'test')
+	# 	elif args.task.lower() == 'lex-depth':
+	# 		test_reporter = LexicalDepthReporter(prober, dep_dataset.test, 'test')
+	# 	else:
+	# 		raise ValueError(
+	# 			"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
+	#
+	# 	test_reporter.predict(args)
+	# 	test_reporter.write(args)
