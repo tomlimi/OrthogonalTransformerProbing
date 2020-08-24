@@ -55,4 +55,5 @@ MODEL_LAYERS = {f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 12,
 BERT_MODEL_DIR = "/net/projects/bert/models/"
 
 #data pipeline options
-BUFFER_SIZE = 100
+BUFFER_SIZE = 50 * 1000 * 1000
+SHUFFLE_SIZE = 512

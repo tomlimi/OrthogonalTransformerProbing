@@ -44,9 +44,9 @@ if __name__ == "__main__":
 		for data_argument, data_value in data_map.items():
 			setattr(args, data_argument, data_value)
 
-	if all(task in ('dep-distance', 'lex-distance') for task in args.tasks):
+	if all(task in ('dep_distance', 'lex_distance') for task in args.tasks):
 		prober = DistanceProbe(args)
-	elif all(task in ('dep-depth', 'lex-depth') for task in args.tasks):
+	elif all(task in ('dep_depth', 'lex_depth') for task in args.tasks):
 		prober = DepthProbe(args)
 	else:
 		raise ValueError(
@@ -58,13 +58,13 @@ if __name__ == "__main__":
 		test_reporter = DependencyDistanceReporter(prober, tf_reader.test, 'test')
 	elif 'dep-depth' in args.tasks:
 		test_reporter = DependencyDepthReporter(prober, tf_reader.test, 'test')
-	elif 'lex-distance' in args.tasks:
+	elif 'lex_distance' in args.tasks:
 		test_reporter = LexicalDistanceReporter(prober, tf_reader.test, 'test')
-	elif 'lex-depth' in args.tasks:
+	elif 'lex_depth' in args.tasks:
 		test_reporter = LexicalDepthReporter(prober, tf_reader.test, 'test')
 	else:
 		raise ValueError(
-			"Unknow probing task: {} Choose `depth`, `lex-depth`, `distance` or `lex-distance`".format(args.task))
+			"Unknow probing task: {} Choose `dep_depth`, `lex_depth`, `dep_distance` or `lex_distance`".format(args.task))
 
 	test_reporter.predict(args)
 	test_reporter.write(args)

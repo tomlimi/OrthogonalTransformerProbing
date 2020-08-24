@@ -3,6 +3,7 @@ import os
 
 import tensorflow as tf
 from abc import abstractmethod
+from functools import partial
 
 from tqdm import tqdm
 import numpy as np
@@ -80,6 +81,27 @@ class Probe():
         pass
 
     @staticmethod
+    def decode(serialized_example, lang, task, layer_idx):
+    
+        x = tf.io.parse_example(
+            serialized_example,
+            features={
+                'num_tokens': tf.io.FixedLenFeature([], tf.int64),
+                'index': tf.io.FixedLenFeature([], tf.int64),
+                f"layer_{layer_idx}": tf.io.FixedLenFeature([], tf.string),
+                f'target_{task}': tf.io.FixedLenFeature([], tf.string),
+                f'mask_{task}': tf.io.FixedLenFeature([], tf.string)
+            })
+    
+        index = tf.cast(x["index"], dtype=tf.int64)
+        target = tf.stack(tf.map_fn(partial(tf.io.parse_tensor, out_type=tf.float32), x[f"target_{task}"], dtype=tf.float32))
+        mask = tf.stack(tf.map_fn(partial(tf.io.parse_tensor, out_type=tf.float32), x[f"mask_{task}"], dtype=tf.float32))
+        num_tokens = tf.cast(x["num_tokens"], dtype=tf.int64)
+        embeddings = tf.stack(tf.map_fn(partial(tf.io.parse_tensor, out_type=tf.float32), x[f"layer_{layer_idx}"], dtype=tf.float32))
+        
+        return lang, task, (index, target, mask, num_tokens, embeddings)
+
+    @staticmethod
     def data_pipeline(tf_data, languages, tasks, args):
 
         datasets_to_interleve = []
@@ -87,24 +109,25 @@ class Probe():
             for task in tasks:
 
                 data = tf_data[lang][task]
-                data = data.map(TFRecordReader.parse)
-                data = data.map(lambda x: (x["index"],
-                                           tf.io.parse_tensor(x[f"target_{task}"], out_type=tf.float32),
-                                           tf.io.parse_tensor(x[f"mask_{task}"], out_type=tf.float32),
-                                           x["num_tokens"],
-                                           tf.io.parse_tensor(x[f"layer_{args.layer_index}"], out_type=tf.float32)))
-                data = data.shuffle(100, args.seed)
+                data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
+
                 data = data.batch(args.batch_size)
-                data = data.map(lambda *x: (lang, task, x))
+                data = data.map(partial(Probe.decode, lang=lang, task=task, layer_idx=args.layer_index),
+                                num_parallel_calls=tf.data.experimental.AUTOTUNE)
+                data = data.prefetch(tf.data.experimental.AUTOTUNE)
                 datasets_to_interleve.append(data)
 
         return tf.data.experimental.sample_from_datasets(datasets_to_interleve)
 
     def train(self, tf_reader, args):
         curr_patience = 0
-        for epoch_idx in range(args.epochs):
 
-            train = self.data_pipeline(tf_reader.train, self.languages, self.tasks, args)
+        train = self.data_pipeline(tf_reader.train, self.languages, self.tasks, args)
+        dev = {lang: {task: self.data_pipeline(tf_reader.dev, [lang], [task], args) for task in self.tasks}
+               for lang in self.languages}
+        
+        for epoch_idx in range(args.epochs):
+            
             progressbar = tqdm(enumerate(train))
 
             for batch_idx, (lang, task, batch) in progressbar:
@@ -116,7 +139,7 @@ class Probe():
                 batch_loss = self._train_fns[lang][task](batch_target, batch_mask, batch_num_tokens, batch_embeddings)
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
-            eval_loss = self.evaluate(tf_reader.dev, 'validation', args)
+            eval_loss = self.evaluate(dev, 'validation', args)
             if eval_loss < self.optimal_loss - self.ES_DELTA:
                 self.optimal_loss = eval_loss
                 self.checkpoint_manager.save()
@@ -141,9 +164,8 @@ class Probe():
         all_losses = np.zeros((len(self.languages), len(self.tasks)))
         for lang_idx, language in enumerate(self.languages):
             for task_idx, task in enumerate(self.tasks):
-                eval = self.data_pipeline(data, [language], [task],args)
 
-                progressbar = tqdm(enumerate(eval))
+                progressbar = tqdm(enumerate(data[language][task]))
                 for batch_idx, (lang2, task2, batch) in progressbar:
                     assert language == lang2.numpy().decode()
                     assert task == task2.numpy().decode()
@@ -183,19 +205,19 @@ class DistanceProbe(Probe):
             # if orthogonalization is used multilingual probe is only diagonal scaling
             self.DistanceProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
                                                     ((1, self.probe_rank,)),
-                                                    trainable=True, name=f'distance_probe_{task}', dtype=tf.float32)
+                                                    trainable=True, name=f'{task}_probe', dtype=tf.float32)
                                   for task in self.tasks}
         else:
             self.DistanceProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
                                                     ((self.probe_rank, self.probe_rank)),
-                                                    trainable=True, name='distance_probe', dtype=tf.float32)
+                                                    trainable=True, name=f'{task}_probe', dtype=tf.float32)
                                   for task in self.tasks}
         self._train_fns = {lang: {task: self.train_factory(lang, task)
                                   for task in self.tasks}
                            for lang in self.languages}
         
         #Checkpoint managment:
-        self.ckpt = tf.train.Checkpoint(optimizer=self._optimizer, distance_probe=self.DistanceProbe, **self.LanguageMaps)
+        self.ckpt = tf.train.Checkpoint(optimizer=self._optimizer, **self.DistanceProbe, **self.LanguageMaps)
         self.checkpoint_manager = tf.train.CheckpointManager(self.ckpt, os.path.join(args.out_dir, 'params'), max_to_keep=1)
 
     @tf.function
@@ -290,23 +312,24 @@ class DepthProbe(Probe):
     def __init__(self, args):
         print('Constructing DepthProbe')
         super().__init__(args)
-
         if self._orthogonal_reg:
             # if orthogonalization is used multilingual probe is only diagonal scaling
-            self.DepthProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
-                                          ((1, self.probe_rank)),
-                                          trainable=True, name='depth_probe', dtype=tf.float32)
+            self.DepthProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
+                                                    ((1, self.probe_rank,)),
+                                                    trainable=True, name=f'{task}_probe', dtype=tf.float32)
+                                  for task in self.tasks}
         else:
-            self.DepthProbe = tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
-                                          ((self.probe_rank, self.model_dim)),
-                                          trainable=True, name='depth_probe', dtype=tf.float32)
+            self.DepthProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.05, maxval=0.05, seed=args.seed)
+                                                    ((self.probe_rank, self.probe_rank)),
+                                                    trainable=True, name=f'{task}_probe', dtype=tf.float32)
+                                  for task in self.tasks}
             
         self._train_fns = {lang: {task: self.train_factory(lang, task)
                                   for task in self.tasks}
                            for lang in self.languages}
 
         # Checkpoint managment:
-        self.ckpt = tf.train.Checkpoint(optimizer=self._optimizer, depth_probe=self.DepthProbe, **self.LanguageMaps)
+        self.ckpt = tf.train.Checkpoint(optimizer=self._optimizer, **self.DepthProbe, **self.LanguageMaps)
         self.checkpoint_manager = tf.train.CheckpointManager(self.ckpt, os.path.join(args.out_dir, 'params'), max_to_keep=1)
 
     @tf.function

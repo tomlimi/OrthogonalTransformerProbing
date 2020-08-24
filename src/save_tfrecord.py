@@ -19,7 +19,7 @@ if __name__ == "__main__":
 	             ('dev', 'en', '../resources/endev.conllu'),
 	             ('test', 'en', '../resources/endev.conllu')]
 
-	tasks = ['dep-distance', 'dep-depth', 'lex-distance', 'lex-depth']
+	tasks = ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth']
 
 	tf_writer = TFRecordWriter(tasks, models, data_spec)
 	tf_writer.compute_and_save(args.data_dir)

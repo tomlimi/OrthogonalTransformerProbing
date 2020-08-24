@@ -12,10 +12,10 @@ from data_support.lexical import LexicalDistance, LexicalDepth
 
 
 conllu_wrappers = {
-    "dep-distance": DependencyDistance,
-    "dep-depth": DependencyDepth,
-    "lex-distance": LexicalDistance,
-    "lex-depth": LexicalDepth
+    "dep_distance": DependencyDistance,
+    "dep_depth": DependencyDepth,
+    "lex_distance": LexicalDistance,
+    "lex_depth": LexicalDepth
 }
 
 
@@ -78,7 +78,7 @@ class TFRecordWriter(TFRecordWrapper):
             for model in models:
                 for task in tasks:
                     # Data for some tasks can be saved in the same file, e.g. dependency and lexical
-                    if task in ['dep-distance', 'dep-depth', 'lex-distance', 'lex-depth']:
+                    if task in ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth']:
                         fn_task = 'dep+lex'
                     else:
                         raise ValueError(f"Unrecognized task: {task}")
