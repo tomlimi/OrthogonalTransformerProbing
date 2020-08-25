@@ -94,26 +94,28 @@ class Probe():
             })
     
         index = tf.cast(x["index"], dtype=tf.int64)
-        target = tf.stack(tf.map_fn(partial(tf.io.parse_tensor, out_type=tf.float32), x[f"target_{task}"], dtype=tf.float32))
-        mask = tf.stack(tf.map_fn(partial(tf.io.parse_tensor, out_type=tf.float32), x[f"mask_{task}"], dtype=tf.float32))
+        target = tf.io.parse_tensor(x[f"target_{task}"], out_type=tf.float32)
+        mask = tf.io.parse_tensor(x[f"mask_{task}"], out_type=tf.float32)
         num_tokens = tf.cast(x["num_tokens"], dtype=tf.int64)
-        embeddings = tf.stack(tf.map_fn(partial(tf.io.parse_tensor, out_type=tf.float32), x[f"layer_{layer_idx}"], dtype=tf.float32))
+        embeddings = tf.io.parse_tensor(x[f"layer_{layer_idx}"], out_type=tf.float32)
         
-        return lang, task, (index, target, mask, num_tokens, embeddings)
+        return index, target, mask, num_tokens, embeddings
 
     @staticmethod
-    def data_pipeline(tf_data, languages, tasks, args):
+    def data_pipeline(tf_data, languages, tasks, args, shuffle=True):
 
         datasets_to_interleve = []
         for lang in languages:
             for task in tasks:
 
                 data = tf_data[lang][task]
-                data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
+                data = data.map(partial(Probe.decode, task=task, layer_idx=args.layer_index),
+                                num_parallel_calls=tf.data.experimental.AUTOTUNE).cache()
 
+                if shuffle:
+                    data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
                 data = data.batch(args.batch_size)
-                data = data.map(partial(Probe.decode, lang=lang, task=task, layer_idx=args.layer_index),
-                                num_parallel_calls=tf.data.experimental.AUTOTUNE)
+                data = data.map(lambda *x: (lang, task, x), num_parallel_calls=tf.data.experimental.AUTOTUNE)
                 data = data.prefetch(tf.data.experimental.AUTOTUNE)
                 datasets_to_interleve.append(data)
 
@@ -123,7 +125,8 @@ class Probe():
         curr_patience = 0
 
         train = self.data_pipeline(tf_reader.train, self.languages, self.tasks, args)
-        dev = {lang: {task: self.data_pipeline(tf_reader.dev, [lang], [task], args) for task in self.tasks}
+        dev = {lang: {task: self.data_pipeline(tf_reader.dev, [lang], [task], args, shuffle=False)
+                      for task in self.tasks}
                for lang in self.languages}
         
         for epoch_idx in range(args.epochs):
