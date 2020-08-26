@@ -166,8 +166,12 @@ class TFRecordWriter(TFRecordWrapper):
                                     token_embedding = tf.math.reduce_mean(tf.stack(token_embeddings, axis=1), axis=1)
                                 pooled_embeddings.append(token_embedding)
 
-                            pooled_embeddings = tf.unstack(tf.stack(pooled_embeddings, axis=1))
-                            train_example = self.serialize_example(idx, pooled_embeddings, tree_size, target_mask)
+                            pooled_embeddings = tf.stack(pooled_embeddings, axis=1)
+                            pooled_embeddings = tf.pad(pooled_embeddings,
+                                                       [[0, 0],
+                                                        [0, constants.MAX_TOKENS - pooled_embeddings.shape[1]],
+                                                        [0, 0]])
+                            train_example = self.serialize_example(idx, tf.unstack(pooled_embeddings), tree_size, target_mask)
                             tf_writer.write(train_example.SerializeToString())
 
         self._to_json(data_dir)
