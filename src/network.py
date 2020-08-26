@@ -81,7 +81,7 @@ class Probe():
         pass
 
     @staticmethod
-    def decode(serialized_example, lang, task, layer_idx):
+    def decode(serialized_example, task, layer_idx):
     
         x = tf.io.parse_example(
             serialized_example,
@@ -113,6 +113,8 @@ class Probe():
                                 num_parallel_calls=tf.data.experimental.AUTOTUNE).cache()
 
                 if shuffle:
+                    if 'der' in task:
+                        data = data.repeat(8)
                     data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
                 data = data.batch(args.batch_size)
                 data = data.map(lambda *x: (lang, task, x), num_parallel_calls=tf.data.experimental.AUTOTUNE)

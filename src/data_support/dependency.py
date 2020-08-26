@@ -155,7 +155,7 @@ class Dependency():
     
 class DependencyDistance(Dependency):
     
-    def __init__(self, conll_file, bert_tokenizer):
+    def __init__(self, conll_file, bert_tokenizer, lang=None):
         super().__init__(conll_file, bert_tokenizer)
 
     def target_and_mask(self):
@@ -232,7 +232,7 @@ class DependencyDistance(Dependency):
     
 class DependencyDepth(Dependency):
     
-    def __init__(self, conll_file, bert_tokenizer):
+    def __init__(self, conll_file, bert_tokenizer, lang=None):
         super().__init__(conll_file, bert_tokenizer)
         
     def target_and_mask(self):

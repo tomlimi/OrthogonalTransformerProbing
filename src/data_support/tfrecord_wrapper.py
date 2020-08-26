@@ -9,13 +9,17 @@ from transformers import BertTokenizer, TFBertModel
 import constants
 from data_support.dependency import DependencyDistance, DependencyDepth
 from data_support.lexical import LexicalDistance, LexicalDepth
+from data_support.derivation import DerivationDistance, DerivationDepth
 
 
 conllu_wrappers = {
     "dep_distance": DependencyDistance,
     "dep_depth": DependencyDepth,
     "lex_distance": LexicalDistance,
-    "lex_depth": LexicalDepth
+    "lex_depth": LexicalDepth,
+    "der_distance": DerivationDistance,
+    "der_depth": DerivationDistance
+
 }
 
 
@@ -70,48 +74,101 @@ class TFRecordWriter(TFRecordWrapper):
 
         super().__init__(tasks, models, languages, map_connl)
 
-        self.model2tfrs = defaultdict(set)
+        self.model2conll = defaultdict(set)
+
         self.tfr2tasks = defaultdict(set)
-        self.tfr2conll = dict()
+        self.conll2dep_tfr_fn = dict()
+        self.conll2der_tfr_fn = dict()
+        self.conll2lang = dict()
 
         for mode, lang, conll in mode_language_conll:
             for model in models:
                 for task in tasks:
                     # Data for some tasks can be saved in the same file, e.g. dependency and lexical
                     if task in ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth']:
-                        fn_task = 'dep+lex'
+
+                        tfr_fn = self.struct_tfrecord_fn(model, 'dep+lex', lang, conll)
+                        # needs to be in the begining of the list
+                        self.conll2dep_tfr_fn[conll] = tfr_fn
+
+                    elif task in ['der_distance', 'der_depth']:
+                        tfr_fn = self.struct_tfrecord_fn(model, 'der', lang, conll)
+                        self.conll2der_tfr_fn[conll] = tfr_fn
                     else:
                         raise ValueError(f"Unrecognized task: {task}")
-                    tfr_fn = self.struct_tfrecord_fn(model,fn_task,lang,conll)
                     #TODO: think about a case where some tfrecord are already saved
                     self.data_map[mode][model][lang][task] = tfr_fn
 
-                    self.model2tfrs[model].add(tfr_fn)
+                    self.model2conll[model].add(conll)
+                    self.conll2lang[conll] = lang
                     self.tfr2tasks[tfr_fn].add(task)
-                    self.tfr2conll[tfr_fn] = conll
 
     def compute_and_save(self, data_dir):
 
+        options = tf.io.TFRecordOptions(compression_type='GZIP')
+
         for model_path in self.models:
-            #This is crude, but should work
+            # This is crude, but should work
             do_lower_case = "uncased" in model_path
             model, tokenizer = self.get_model_tokenizer(model_path, do_lower_case=do_lower_case)
-            for tfrecord_file in self.model2tfrs[model_path]:
-                conll_fn = self.tfr2conll[tfrecord_file]
-                tasks = list(self.tfr2tasks[tfrecord_file])
+            for conll_fn in self.model2conll[model_path]:
+                #TODO: implement derivation tree reading embeddings and saving to tf revord
+                lang = self.conll2lang[conll_fn]
 
-                in_datasets = [conllu_wrappers[task](conll_fn, tokenizer) for task in tasks]
-                all_wordpieces, all_segments, all_token_len = in_datasets[0].training_examples()
+                dep_lex_tfrecord_file = self.conll2dep_tfr_fn.get(conll_fn)
+                der_tfrecord_file = self.conll2der_tfr_fn.get(conll_fn)
+                save_derivation = der_tfrecord_file is not None
 
-                options = tf.io.TFRecordOptions(compression_type='GZIP')
-                with tf.io.TFRecordWriter(os.path.join(data_dir, tfrecord_file), options=options) as tf_writer:
-                    for idx, (wordpieces, segments, token_len, target_mask) in \
-                            tqdm(enumerate(zip(tf.unstack(all_wordpieces), tf.unstack(all_segments), tf.unstack(all_token_len),
-                                     self.generate_target_masks(tasks, in_datasets))), desc="Embedding computation"):
+                if save_derivation:
+                    der_tasks = list(self.tfr2tasks[der_tfrecord_file])
+                    der_datasets = [conllu_wrappers[task](conll_fn, tokenizer, lang=lang) for task in der_tasks]
+                    embeddings_cache = [[[] for _ in tree_nodes] for tree_nodes in der_datasets[0].trees_nodes]
+
+                dep_lex_tasks = list(self.tfr2tasks[dep_lex_tfrecord_file])
+
+                dep_lex_datasets = [conllu_wrappers[task](conll_fn, tokenizer, lang=lang) for task in dep_lex_tasks]
+                all_wordpieces, all_segments, all_token_len = dep_lex_datasets[0].training_examples()
+                all_lemmas = dep_lex_datasets[0].lemmas
+                all_pos = dep_lex_datasets[0].pos
+
+
+                with tf.io.TFRecordWriter(os.path.join(data_dir, dep_lex_tfrecord_file), options=options) as tf_writer:
+                    for idx, (wordpieces, segments, token_len, lemmas, poss, target_mask) in \
+                            tqdm(enumerate(zip(tf.unstack(all_wordpieces), tf.unstack(all_segments),
+                                               tf.unstack(all_token_len), all_lemmas, all_pos,
+                                               self.generate_target_masks(dep_lex_tasks, dep_lex_datasets))),
+                                 desc="Saving dependency and lexical data to TFRecord"):
 
                         embeddings = self.calc_embeddings(model, wordpieces, segments, token_len)
                         train_example = self.serialize_example(idx, embeddings, token_len, target_mask)
                         tf_writer.write(train_example.SerializeToString())
+                        if save_derivation:
+                            for lemma, pos, embedding in zip(lemmas, poss, tf.unstack(embeddings, axis=1)):
+                                if pos in ('NOUN', 'ADJ', 'ADV', 'VERB') and (lemma, pos) in der_datasets[0].lemma_pos2tree_node:
+
+                                    tree_idx, node_idx = der_datasets[0].lemma_pos2tree_node[(lemma, pos)]
+                                    embeddings_cache[tree_idx][node_idx].append(embedding)
+
+                if save_derivation:
+                    all_tree_sizes = [len(tree_nodes) for tree_nodes in der_datasets[0].trees_nodes]
+                    with tf.io.TFRecordWriter(os.path.join(data_dir, der_tfrecord_file), options=options) as tf_writer:
+                        for idx, (cached_embeddings, tree_size, target_mask) in \
+                                tqdm(enumerate(zip(embeddings_cache, all_tree_sizes,
+                                                   self.generate_target_masks(der_tasks, der_datasets))),
+                                     desc="Saving derivation data to TFRecord"):
+                            pooled_embeddings = []
+                            for token_embeddings in cached_embeddings:
+                                if not token_embeddings:
+                                    token_embedding = tf.zeros([constants.MODEL_LAYERS[model_path], constants.MODEL_DIMS[model_path]],
+                                                               dtype=tf.dtypes.float32)
+                                else:
+                                    # we take mean pool of the embeddings for one lemma_pos, maybe sth different can be used
+                                    token_embedding = tf.math.reduce_mean(tf.stack(token_embeddings, axis=1), axis=1)
+                                pooled_embeddings.append(token_embedding)
+
+                            pooled_embeddings = tf.unstack(tf.stack(pooled_embeddings, axis=1))
+                            train_example = self.serialize_example(idx, pooled_embeddings, tree_size, target_mask)
+                            tf_writer.write(train_example.SerializeToString())
 
         self._to_json(data_dir)
 
