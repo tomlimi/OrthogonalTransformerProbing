@@ -171,9 +171,7 @@ class Probe():
             for task_idx, task in enumerate(self.tasks):
 
                 progressbar = tqdm(enumerate(data[language][task]))
-                for batch_idx, (lang2, task2, batch) in progressbar:
-                    assert language == lang2.numpy().decode()
-                    assert task == task2.numpy().decode()
+                for batch_idx, (_, _, batch) in progressbar:
 
                     _, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
                     batch_loss = self.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens, batch_embeddings,
