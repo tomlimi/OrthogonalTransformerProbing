@@ -18,7 +18,7 @@ conllu_wrappers = {
     "lex_distance": LexicalDistance,
     "lex_depth": LexicalDepth,
     "der_distance": DerivationDistance,
-    "der_depth": DerivationDistance
+    "der_depth": DerivationDepth
 
 }
 

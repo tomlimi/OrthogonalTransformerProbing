@@ -5,13 +5,13 @@ from itertools import chain
 import tensorflow as tf
 import numpy as np
 
-from data_support.dependency import Dependency
+from data_support.conll_wrapper import ConllWrapper
 import constants
 
 UDER = {'en': '../resources/UDer-1.0-en-CatVar.tsv'}
 
 
-class Derivation(Dependency):
+class Derivation(ConllWrapper):
 	def __init__(self, conll_file, bert_tokenizer, lang):
 		super().__init__(conll_file, bert_tokenizer)
 		self.lemma_pos2tree_node = dict()

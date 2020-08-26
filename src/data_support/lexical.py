@@ -3,11 +3,11 @@ import tensorflow as tf
 from functools import lru_cache
 from nltk.corpus import wordnet as wn
 
-from data_support.dependency import Dependency
+from data_support.conll_wrapper import ConllWrapper
 import constants
 
 
-class LexicalDistance(Dependency):
+class LexicalDistance(ConllWrapper):
 
     def __init__(self, conll_file, bert_tokenizer, lang='en'):
         super().__init__(conll_file, bert_tokenizer)
@@ -85,7 +85,7 @@ class LexicalDistance(Dependency):
         return 1./max_similarity
 
 
-class LexicalDepth(Dependency):
+class LexicalDepth(ConllWrapper):
 
     def __init__(self, conll_file, bert_tokenizer, lang='en'):
         super().__init__(conll_file, bert_tokenizer)
