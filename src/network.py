@@ -11,6 +11,13 @@ import numpy as np
 import constants
 from data_support.tfrecord_wrapper import TFRecordReader
 
+# this should be read from data, only temporary solution
+# TODO: get this info from tfrecord_wrapper
+DER_SIZE = 1621
+DER_TRAIN_SIZE = int(0.8 * DER_SIZE)
+DER_DEV_SIZE = int(0.1 * DER_SIZE)
+
+
 class Probe():
 
     ONPLATEU_DECAY = 0.1
@@ -102,17 +109,28 @@ class Probe():
         return index, target, mask, num_tokens, embeddings
 
     @staticmethod
-    def data_pipeline(tf_data, languages, tasks, args, shuffle=True):
+    def data_pipeline(tf_data, languages, tasks, args, mode='train'):
 
         datasets_to_interleve = []
         for lang in languages:
             for task in tasks:
 
                 data = tf_data[lang][task]
+
+                if 'der' in task:
+                    if mode == 'train':
+                        data = data.take(DER_TRAIN_SIZE)
+                    else:
+                        not_train_data = data.skip(DER_TRAIN_SIZE)
+                        if mode == 'dev':
+                            data = not_train_data.take(DER_DEV_SIZE)
+                        else:
+                            data = not_train_data.skip(DER_DEV_SIZE)
+
                 data = data.map(partial(Probe.decode, task=task, layer_idx=args.layer_index),
                                 num_parallel_calls=tf.data.experimental.AUTOTUNE).cache()
 
-                if shuffle:
+                if mode == 'train':
                     if 'der' in task:
                         data = data.repeat(8)
                     data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
@@ -126,8 +144,8 @@ class Probe():
     def train(self, tf_reader, args):
         curr_patience = 0
 
-        train = self.data_pipeline(tf_reader.train, self.languages, self.tasks, args)
-        dev = {lang: {task: self.data_pipeline(tf_reader.dev, [lang], [task], args, shuffle=False)
+        train = self.data_pipeline(tf_reader.train, self.languages, self.tasks, args, mode='train')
+        dev = {lang: {task: self.data_pipeline(tf_reader.dev, [lang], [task], args, mode='dev')
                       for task in self.tasks}
                for lang in self.languages}
         

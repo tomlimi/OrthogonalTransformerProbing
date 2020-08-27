@@ -90,18 +90,23 @@ class TFRecordWriter(TFRecordWrapper):
                         tfr_fn = self.struct_tfrecord_fn(model, 'dep+lex', lang, conll)
                         # needs to be in the begining of the list
                         self.conll2dep_tfr_fn[conll] = tfr_fn
+                        self.tfr2tasks[tfr_fn].add(task)
+                        self.data_map[mode][model][lang][task] = tfr_fn
 
                     elif task in ['der_distance', 'der_depth']:
-                        tfr_fn = self.struct_tfrecord_fn(model, 'der', lang, conll)
-                        self.conll2der_tfr_fn[conll] = tfr_fn
+                        if mode == 'train':
+                            tfr_fn = self.struct_tfrecord_fn(model, 'der', lang, conll)
+                            self.conll2der_tfr_fn[conll] = tfr_fn
+                            self.tfr2tasks[tfr_fn].add(task)
+                            self.data_map['train'][model][lang][task] = tfr_fn
+                            self.data_map['dev'][model][lang][task] = tfr_fn
+                            self.data_map['test'][model][lang][task] = tfr_fn
+
                     else:
                         raise ValueError(f"Unrecognized task: {task}")
                     #TODO: think about a case where some tfrecord are already saved
-                    self.data_map[mode][model][lang][task] = tfr_fn
-
                     self.model2conll[model].add(conll)
                     self.conll2lang[conll] = lang
-                    self.tfr2tasks[tfr_fn].add(task)
 
     def compute_and_save(self, data_dir):
 
