@@ -3,7 +3,7 @@ import argparse
 import json
 
 from data_support.tfrecord_wrapper import TFRecordReader
-from network import DistanceProbe, DepthProbe
+from network import Network
 
 import constants
 
@@ -59,12 +59,6 @@ if __name__ == "__main__":
 	tf_reader = TFRecordReader(args.data_dir, args.bert_path)
 	tf_reader.read(args.tasks, args.languages)
 
-	if all(task in ('dep_distance', 'lex_distance', 'der_distance') for task in args.tasks):
-		prober = DistanceProbe(args)
-	elif all(task in ('dep_depth', 'lex_depth', 'der_depth') for task in args.tasks):
-		prober = DepthProbe(args)
-	else:
-		raise ValueError(
-			"Unknow probing task: {} Choose `dep_depth`, `lex_depth`, `dep_distance` or `lex_distance`".format(args.task))
+	network = Network(args)
 
-	prober.train(tf_reader,args)
+	network.train(tf_reader,args)
