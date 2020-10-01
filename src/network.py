@@ -327,7 +327,11 @@ class Network():
 
         datasets_to_interleve = []
         for lang in languages:
+            if lang not in tf_data:
+                raise ValueError(f"Language: {lang} not found in the data set")
             for task in tasks:
+                if task not in tf_data[lang]:
+                    raise ValueError(f"Task: {task} not found in the data set")
 
                 data = tf_data[lang][task]
 
