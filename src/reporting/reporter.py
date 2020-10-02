@@ -76,6 +76,80 @@ class CorrelationReporter(Reporter):
 					self.spearman_d[language][task](gold_values, pred_values, mask)
 
 
+class GatedCorrelationReporter(Reporter):
+
+	def __init__(self, args, network, dataset, dataset_name):
+		super().__init__(network, dataset, dataset_name)
+
+		self._probe_threshold = args.probe_threshold
+
+		self._languages = args.languages
+		self._tasks = args.tasks
+		self.spearman_d = defaultdict(dict)
+
+	def write(self, args):
+		for language in self._languages:
+			for task in self._tasks:
+				prefix = '{}.{}.{}.gated.'.format(self.dataset_name, language, task)
+
+				with open(os.path.join(args.out_dir, prefix + 'spearman'), 'w') as sperarman_f:
+					for sent_l, val in self.spearman_d[language][task].result().items():
+						sperarman_f.write(f'{sent_l}\t{val}\n')
+
+				with open(os.path.join(args.out_dir, prefix + 'spearman_mean'), 'w') as sperarman_mean_f:
+					result = str(np.nanmean(np.fromiter(self.spearman_d[language][task].result().values(), dtype=float)))
+					sperarman_mean_f.write(result + '\n')
+
+	def get_embedding_gate(self, task):
+
+		if 'distance' in task:
+			diagonal_probe = self.network.distance_probe.DistanceProbe[task].numpy()
+		elif 'depth' in task:
+			diagonal_probe = self.network.depth_probe.DepthProbe[task].numpy()
+		embedding_gate = (np.abs(diagonal_probe) > self._probe_threshold).astype(np.float)
+
+		return tf.constant(embedding_gate, dtype=tf.float32)
+
+
+
+	def predict(self, args):
+
+		test = {lang: {task: Network.data_pipeline(self.dataset, [lang], [task], args, mode='test')
+		               for task in self._tasks}
+		        for lang in self._languages}
+
+		for language in self._languages:
+			for task in self._tasks:
+
+				self.spearman_d[language][task] = Spearman()
+				progressbar = tqdm(enumerate(test[language][task]), desc="Predicting, {}, {}".format(language, task))
+				for batch_idx, (_, _, batch) in progressbar:
+					_, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
+
+					embedding_gate = self.get_embedding_gate(task)
+
+					if 'distance' in task:
+						pred_values = self.network.distance_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
+						                                                           language, task, embedding_gate)
+						pred_values = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
+						               in zip(tf.unstack(pred_values), batch_num_tokens)]
+						gold_values = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
+						               in zip(tf.unstack(batch_target), batch_num_tokens)]
+						mask = [sent_mask.numpy().astype(bool)[:sent_len, :sent_len] for sent_mask, sent_len
+						        in zip(tf.unstack(batch_mask), batch_num_tokens)]
+					elif 'depth' in task:
+						pred_values = self.network.depth_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
+						                                                        language, task, embedding_gate)
+						pred_values = [sent_predicted.numpy()[:sent_len] for sent_predicted, sent_len
+						               in zip(tf.unstack(pred_values), batch_num_tokens)]
+						gold_values = [sent_gold.numpy()[:sent_len] for sent_gold, sent_len
+						               in zip(tf.unstack(batch_target), batch_num_tokens)]
+						mask = [sent_mask.numpy().astype(bool)[:sent_len] for sent_mask, sent_len
+						        in zip(tf.unstack(batch_mask), batch_num_tokens)]
+
+					self.spearman_d[language][task](gold_values, pred_values, mask)
+
+
 # class DependencyDistanceReporter(Reporter):
 #
 # 	def __init__(self, prober, dataset, dataset_name):
