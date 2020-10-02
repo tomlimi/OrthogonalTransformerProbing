@@ -97,7 +97,7 @@ class Network():
                                for lang in self.languages}
 
         @tf.function
-        def _forward(self, embeddings, max_token_len, language, task):
+        def _forward(self, embeddings, max_token_len, language, task, embeddings_gate=None):
             """ Computes all n^2 pairs of distances after projection
             for each sentence in a batch.
 
@@ -110,8 +110,11 @@ class Network():
                 embeddings = embeddings @ self.probe.LanguageMaps[language]
             if self.probe._orthogonal_reg:
                 embeddings = embeddings * self.DistanceProbe[task]
+                if embeddings_gate is not None:
+                    embeddings = embeddings * embeddings_gate
             else:
                 embeddings = embeddings @ self.DistanceProbe[task]
+
 
             embeddings = tf.expand_dims(embeddings, 1)  # shape [batch, 1, seq_len, emb_dim]
             transposed_embeddings = tf.transpose(embeddings, perm=(0, 2, 1, 3))  # shape [batch, seq_len, 1, emb_dim]
@@ -176,9 +179,9 @@ class Network():
             return loss
 
         @tf.function(experimental_relax_shapes=True)
-        def predict_on_batch(self, token_len, embeddings, language, task):
+        def predict_on_batch(self, token_len, embeddings, language, task, embeddings_gate=None):
             max_token_len = tf.reduce_max(token_len)
-            predicted_distances = self._forward(embeddings, max_token_len, language, task)
+            predicted_distances = self._forward(embeddings, max_token_len, language, task, embeddings_gate)
             return predicted_distances
 
 
@@ -208,7 +211,7 @@ class Network():
                                for lang in self.languages}
 
         @tf.function
-        def _forward(self, embeddings, max_token_len, language, task):
+        def _forward(self, embeddings, max_token_len, language, task, embeddings_gate=None):
             """ Computes all n depths after projection for each sentence in a batch.
             Computes (Bh_i)^T(Bh_i) for all i
             """
@@ -217,6 +220,8 @@ class Network():
                 embeddings = embeddings @ self.probe.LanguageMaps[language]
             if self.probe._orthogonal_reg:
                 embeddings = embeddings * self.DepthProbe[task]
+                if embeddings_gate is not None:
+                    embeddings = embeddings * embeddings_gate
             else:
                 embeddings = embeddings @ self.DepthProbe[task]
 
@@ -278,9 +283,9 @@ class Network():
             return loss
 
         @tf.function(experimental_relax_shapes=True)
-        def predict_on_batch(self, token_len, embeddings, language, task):
+        def predict_on_batch(self, token_len, embeddings, language, task, embeddings_gate=None):
             max_token_len = tf.reduce_max(token_len)
-            predicted_depths = self._forward(embeddings, max_token_len, language, task)
+            predicted_depths = self._forward(embeddings, max_token_len, language, task, embeddings_gate)
             return predicted_depths
 
     def __init__(self, args):
