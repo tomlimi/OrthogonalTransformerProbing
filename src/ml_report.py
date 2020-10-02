@@ -24,7 +24,12 @@ if __name__ == "__main__":
 	parser.add_argument("--tasks", type=str, nargs='*',
 	                    help="Probing tasks (distance, lex-distance, depth or lex-depth)")
 	# Reporter arguments
-	parser.add_argument("--probe-threshold", default=None, type=float)
+	parser.add_argument("--probe-threshold", default=None, type=float,
+	                    help="Threshold to filter out dimensions with small values in dependency|depth probe")
+	parser.add_argument("--drop-parts", default=None, type=int,
+	                    help="When not none the non-zero dimesnions of dependency|depth probe are divided into "
+	                         "parts and inference is run multiple times with part of dimension zeroed each time."
+	                         "Averaged results are reported (similart to Cross Validation).")
 
 	# Probe arguments
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
