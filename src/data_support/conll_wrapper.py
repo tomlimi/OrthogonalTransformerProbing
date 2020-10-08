@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from collections import defaultdict
 
 import constants
 
@@ -16,6 +17,7 @@ class ConllWrapper():
         self.pos = []
         self.relations = []
         self.roots = []
+        self.coreferences = []
 
         self.wordpieces = []
         self.segments = []
@@ -40,7 +42,7 @@ class ConllWrapper():
     
     @property
     def word_count(self):
-        return [len(sent_relation) for sent_relation in self.relations]
+        return [len(sent_tokens) for sent_tokens in self.tokens]
     
     def remove_indices(self, indices_to_rm):
         if self.tokens:
@@ -53,16 +55,21 @@ class ConllWrapper():
             self.relations = [v for i, v in enumerate(self.relations) if i not in indices_to_rm]
         if self.roots:
             self.roots = [v for i, v in enumerate(self.roots) if i not in indices_to_rm]
+        if self.coreferences:
+            self.coreferences = [v for i, v in enumerate(self.coreferences) if i not in indices_to_rm]
 
     def read_conllu(self, conll_file_path):
         sentence_relations = []
         sentence_tokens = []
         sentence_lemmas = []
         sentence_pos = []
-        sentence_features = []
+        sentence_coreference = []
+
 
         with open(conll_file_path, 'r') as in_conllu:
             sentid = 0
+
+            curr_coref = set()
             for line in in_conllu:
                 if line == '\n':
                     self.relations.append(sentence_relations)
@@ -73,6 +80,9 @@ class ConllWrapper():
                     sentence_lemmas = []
                     self.pos.append(sentence_pos)
                     sentence_pos = []
+                    self.coreferences.append(sentence_coreference)
+                    sentence_coreference = []
+                    coref_counter = defaultdict(int)
 
                     sentid += 1
                 elif line.startswith('#'):
@@ -90,6 +100,9 @@ class ConllWrapper():
                         sentence_tokens.append(fields[constants.CONLLU_ORTH])
                         sentence_lemmas.append(fields[constants.CONLLU_LEMMA])
                         sentence_pos.append(fields[constants.CONLLU_POS])
+                        if len(fields) >= constants.CONLL_COREF:
+                            coref, curr_coref = self.process_coreference(curr_coref, fields[constants.CONLL_COREF])
+                            sentence_coreference.append(coref)
 
     def get_bert_ids(self, wordpieces):
         """Token ids from Tokenizer vocab"""

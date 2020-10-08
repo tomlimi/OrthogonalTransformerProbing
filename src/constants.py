@@ -1,7 +1,7 @@
 from nltk.corpus import wordnet as wn
 # Wordpieces | Tokens limits
-MAX_TOKENS = 128
-MAX_WORDPIECES = 128
+MAX_TOKENS = 512
+MAX_WORDPIECES = 512
 
 # Conllu indices
 CONLLU_ID = 0
@@ -11,6 +11,8 @@ CONLLU_POS = 3
 CONLLU_FEATS = 5
 CONLLU_HEAD = 6
 CONLLU_LABEL = 7
+
+CONLL_COREF = 16
 
 # WordNet constants
 # we only consider NOUNs and VERBs, because there is no graph structure for other POS
