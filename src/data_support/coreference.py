@@ -14,7 +14,7 @@ MAX_COREF_DISTANCE = 5
 class CoreferenceDistance(ConllWrapper):
 
 	def __init__(self, conll_file, bert_tokenizer, lang=None):
-		super().__init__(conll_file, bert_tokenizer)
+		super().__init__(conll_file, bert_tokenizer, resize_sentences=True)
 
 	@staticmethod
 	def process_coreference(coref, coreference_line):
@@ -73,12 +73,6 @@ class CoreferenceDistance(ConllWrapper):
 						sentence_tokens.append(fields[constants.CONLLU_ORTH])
 						coref, curr_coref = self.process_coreference(curr_coref, fields[constants.CONLL_COREF])
 						sentence_coreference.append(coref)
-
-	def remove_indices(self, indices_to_rm):
-		if self.tokens:
-			self.tokens = [v for i, v in enumerate(self.tokens) if i not in indices_to_rm]
-		if self.coreferences:
-			self.coreferences = [v for i, v in enumerate(self.coreferences) if i not in indices_to_rm]
 
 	@staticmethod
 	def coreferents_distances(coreference_list):

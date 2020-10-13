@@ -10,7 +10,7 @@ import constants
 class LexicalDistance(ConllWrapper):
 
     def __init__(self, conll_file, bert_tokenizer, lang='en'):
-        super().__init__(conll_file, bert_tokenizer)
+        super().__init__(conll_file, bert_tokenizer, resize_sentences=False)
         if lang not in constants.lang2iso:
             raise ValueError(f'Language {lang} is not supported by Open Multilingual Wordnet')
         self.iso_lang = constants.lang2iso[lang]
@@ -88,7 +88,7 @@ class LexicalDistance(ConllWrapper):
 class LexicalDepth(ConllWrapper):
 
     def __init__(self, conll_file, bert_tokenizer, lang='en'):
-        super().__init__(conll_file, bert_tokenizer)
+        super().__init__(conll_file, bert_tokenizer, resize_sentences=False)
         if lang not in constants.lang2iso:
             raise ValueError(f'Language {lang} is not supported by Open Multilingual Wordnet')
         self.iso_lang = constants.lang2iso[lang]
