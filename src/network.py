@@ -340,22 +340,10 @@ class Network():
 
                 data = tf_data[lang][task]
 
-                if 'der' in task:
-                    if mode == 'train':
-                        data = data.take(DER_TRAIN_SIZE)
-                    else:
-                        not_train_data = data.skip(DER_TRAIN_SIZE)
-                        if mode == 'dev':
-                            data = not_train_data.take(DER_DEV_SIZE)
-                        else:
-                            data = not_train_data.skip(DER_DEV_SIZE)
-
                 data = data.map(partial(Network.decode, task=task, layer_idx=args.layer_index),
                                 num_parallel_calls=tf.data.experimental.AUTOTUNE).cache()
 
                 if mode == 'train':
-                    if 'der' in task:
-                        data = data.repeat(8)
                     data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
                 data = data.batch(args.batch_size)
                 data = data.map(lambda *x: (lang, task, x), num_parallel_calls=tf.data.experimental.AUTOTUNE)

@@ -46,7 +46,7 @@ class TFRecordWrapper:
                     for task in tasks:
                         self.map_tfrecord[mode][model][lang][task] = None
 
-        self.map_conll = copy(self.map_tfecord)
+        self.map_conll = copy(self.map_tfrecord)
 
     def _from_json(self, data_dir):
         with open(os.path.join(data_dir,self.data_map_fn),'r') as in_json:
@@ -59,7 +59,7 @@ class TFRecordWrapper:
                     "models": self.models,
                     "languages": self.languages,
                     "map_conll": self.map_conll,
-                    "data_map": self.map_tfrecord}
+                    "map_tfrecord": self.map_tfrecord}
 
         with open(os.path.join(data_dir,self.data_map_fn), 'w') as out_json:
             json.dump(out_dict, out_json, indent=2, sort_keys=True)
