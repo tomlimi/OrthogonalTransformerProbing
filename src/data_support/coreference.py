@@ -14,7 +14,7 @@ MAX_COREF_DISTANCE = 5
 class CoreferenceDistance(ConllWrapper):
 
 	def __init__(self, conll_file, bert_tokenizer, lang=None):
-		super().__init__(conll_file, bert_tokenizer, resize_sentences=True)
+		super().__init__(conll_file, bert_tokenizer, resize_examples=True)
 
 	@staticmethod
 	def process_coreference(coref, coreference_line):

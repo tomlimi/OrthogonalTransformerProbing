@@ -8,7 +8,7 @@ from data_support.conll_wrapper import ConllWrapper
 class DependencyDistance(ConllWrapper):
 
     def __init__(self, conll_file, bert_tokenizer, lang=None):
-        super().__init__(conll_file, bert_tokenizer, resize_sentences=False)
+        super().__init__(conll_file, bert_tokenizer, resize_examples=False)
 
     def target_and_mask(self):
         """Computes the distances between all pairs of words; returns them as a tensor.
@@ -85,7 +85,7 @@ class DependencyDistance(ConllWrapper):
 class DependencyDepth(ConllWrapper):
 
     def __init__(self, conll_file, bert_tokenizer, lang=None):
-        super().__init__(conll_file, bert_tokenizer, resize_sentences=False)
+        super().__init__(conll_file, bert_tokenizer, resize_examples=False)
 
     def target_and_mask(self):
         """Computes the depth of each word; returns them as a tensor.
