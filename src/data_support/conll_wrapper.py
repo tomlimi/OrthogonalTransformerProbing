@@ -7,7 +7,7 @@ import constants
 
 class ConllWrapper():
 
-    def __init__(self, conll_file, bert_tokenizer, resize_sentences):
+    def __init__(self, conll_file, bert_tokenizer, resize_examples):
 
         self.conllu_name = conll_file
         self.tokenizer = bert_tokenizer
@@ -24,7 +24,7 @@ class ConllWrapper():
         # self.max_segment = []
 
         self.read_conllu(conll_file)
-        self.training_examples(resize_sentences)
+        self.training_examples(resize_examples)
 
     @property
     def unlabeled_relations(self):
@@ -125,7 +125,7 @@ class ConllWrapper():
         input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
         return input_ids
 
-    def training_examples(self, resize_examples, resize_sentences=False):
+    def training_examples(self, resize_examples=False):
         '''
         Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
         :param wordpieces_all: lists of BPE pieces for each sentence
