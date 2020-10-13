@@ -15,11 +15,15 @@ if __name__ == "__main__":
 	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	models = [args.bert_path]
 	languages = ['en']
-	data_spec = [('train', 'en', '../resources/endev.conllu'),
-	             ('dev', 'en', '../resources/endev.conllu'),
-	             ('test', 'en', '../resources/endev.conllu')]
+	data_spec = [('train', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth', '../resources/endev.conllu'),
+	             ('dev', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth', '../resources/endev.conllu'),
+	             ('test', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth', '../resources/endev.conllu'),
+	             ('train', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll'),
+	             ('dev', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll'),
+	             ('test', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll')
+	             ]
 
-	tasks = ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'der_distance', 'der_depth']
+	tasks = ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'cor_distance']
 
-	tf_writer = TFRecordWriter(tasks, models, data_spec)
+	tf_writer = TFRecordWriter(models, data_spec)
 	tf_writer.compute_and_save(args.data_dir)
