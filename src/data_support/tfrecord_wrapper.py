@@ -30,7 +30,7 @@ class TFRecordWrapper:
     modes = ['train', 'dev', 'test']
     data_map_fn = "data_map.json"
 
-    def __init__(self, tasks, models, languages, map_conll):
+    def __init__(self, tasks, models, languages):
         self.tasks = tasks
         self.models = models
         self.languages = list(set(languages))
@@ -76,7 +76,7 @@ class TFRecordWriter(TFRecordWrapper):
 
         #map_connl = {mode: {lang: {tasks: conll}} for mode, lang, tasks, conll in mode_language_tasks_conll}
 
-        super().__init__(unique_tasks, models, languages, map_connl)
+        super().__init__(unique_tasks, models, languages)
 
         self.model2conll = defaultdict(set)
 
@@ -198,7 +198,7 @@ class TFRecordWriter(TFRecordWrapper):
 class TFRecordReader(TFRecordWrapper):
 
     def __init__(self, data_dir, model_name='bert-base-multilingual-uncased'):
-        super().__init__([], [], [], None)
+        super().__init__([], [], [])
         self.data_dir = data_dir
         self.model_name = model_name
         self._from_json(data_dir)
