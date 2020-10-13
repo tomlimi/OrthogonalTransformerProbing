@@ -7,7 +7,7 @@ import constants
 
 class ConllWrapper():
 
-    def __init__(self, conll_file, bert_tokenizer):
+    def __init__(self, conll_file, bert_tokenizer, resize_sentences):
 
         self.conllu_name = conll_file
         self.tokenizer = bert_tokenizer
@@ -19,12 +19,12 @@ class ConllWrapper():
         self.roots = []
         self.coreferences = []
 
-        self.wordpieces = []
-        self.segments = []
-        self.max_segment = []
+        # self.wordpieces = []
+        # self.segments = []
+        # self.max_segment = []
 
         self.read_conllu(conll_file)
-        self.training_examples()
+        self.training_examples(resize_sentences)
 
     @property
     def unlabeled_relations(self):
@@ -57,6 +57,21 @@ class ConllWrapper():
             self.roots = [v for i, v in enumerate(self.roots) if i not in indices_to_rm]
         if self.coreferences:
             self.coreferences = [v for i, v in enumerate(self.coreferences) if i not in indices_to_rm]
+
+    def resize_index(self, index_to_cut, new_size):
+        if self.tokens:
+            self.tokens[index_to_cut] = self.tokens[index_to_cut][:new_size]
+        if self.lemmas:
+            self.lemmas[index_to_cut] = self.lemmas[index_to_cut][:new_size]
+        if self.pos:
+            self.pos[index_to_cut] = self.pos[index_to_cut][:new_size]
+        if self.relations:
+            self.relations[index_to_cut] = self.relations[index_to_cut][:new_size]
+        if self.roots:
+            #TODO: think whether it is the best option
+            self.roots[index_to_cut] = min(self.roots[index_to_cut],new_size-1)
+        if self.coreferences:
+            self.coreferences[index_to_cut] = self.coreferences[index_to_cut][:new_size]
 
     def read_conllu(self, conll_file_path):
         sentence_relations = []
@@ -110,7 +125,7 @@ class ConllWrapper():
         input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
         return input_ids
 
-    def training_examples(self):
+    def training_examples(self, resize_examples, resize_sentences=False):
         '''
         Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
         :param wordpieces_all: lists of BPE pieces for each sentence
@@ -125,6 +140,17 @@ class ConllWrapper():
         indices_to_rm = []
         for idx, sent_tokens in enumerate(self.tokens[:]):
             sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)), add_special_tokens=False) + ["[SEP]"]
+
+            if resize_examples == True:
+                cutting_counter = -1
+                while len(sent_tokens) >= constants.MAX_TOKENS or len(sent_wordpieces) >= constants.MAX_WORDPIECES:
+                    cutting_counter += 1
+                    sent_tokens = sent_tokens[:constants.MAX_TOKENS - 2 - 10*cutting_counter]
+                    sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)),
+                                                                          add_special_tokens=False) + ["[SEP]"]
+                else:
+                    self.resize_index(idx,constants.MAX_TOKENS - 2 - 10*cutting_counter)
+
             wordpieces.append(sent_wordpieces)
             if len(sent_tokens) >= constants.MAX_TOKENS:
                 print(f"Sentence {idx} too many tokens in file {self.conllu_name}, skipping.")
