@@ -7,6 +7,8 @@ import constants
 
 class ConllWrapper():
 
+    max_wordpieces = None
+
     def __init__(self, conll_file, bert_tokenizer, resize_examples):
 
         self.conllu_name = conll_file
@@ -18,10 +20,6 @@ class ConllWrapper():
         self.relations = []
         self.roots = []
         self.coreferences = []
-
-        # self.wordpieces = []
-        # self.segments = []
-        # self.max_segment = []
 
         self.read_conllu(conll_file)
         self.training_examples(resize_examples)
@@ -80,7 +78,6 @@ class ConllWrapper():
         sentence_pos = []
         sentence_coreference = []
 
-
         with open(conll_file_path, 'r') as in_conllu:
             sentid = 0
 
@@ -115,14 +112,11 @@ class ConllWrapper():
                         sentence_tokens.append(fields[constants.CONLLU_ORTH])
                         sentence_lemmas.append(fields[constants.CONLLU_LEMMA])
                         sentence_pos.append(fields[constants.CONLLU_POS])
-                        if len(fields) >= constants.CONLL_COREF:
-                            coref, curr_coref = self.process_coreference(curr_coref, fields[constants.CONLL_COREF])
-                            sentence_coreference.append(coref)
 
     def get_bert_ids(self, wordpieces):
         """Token ids from Tokenizer vocab"""
         token_ids = self.tokenizer.convert_tokens_to_ids(wordpieces)
-        input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
+        input_ids = token_ids + [0] * (self.max_wordpieces - len(wordpieces))
         return input_ids
 
     def training_examples(self, resize_examples=False):
@@ -141,25 +135,29 @@ class ConllWrapper():
         for idx, sent_tokens in enumerate(self.tokens[:]):
             sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)), add_special_tokens=False) + ["[SEP]"]
 
-            if resize_examples == True:
+            if self.max_wordpieces == constants.MAX_WORDPIECES_DOC:
                 cutting_counter = -1
-                while len(sent_tokens) >= constants.MAX_TOKENS or len(sent_wordpieces) >= constants.MAX_WORDPIECES:
+                while len(sent_tokens) >= constants.MAX_TOKENS_DOC or len(sent_wordpieces) >= constants.MAX_WORDPIECES_DOC:
                     cutting_counter += 1
-                    sent_tokens = sent_tokens[:constants.MAX_TOKENS - 2 - 10*cutting_counter]
+                    sent_tokens = sent_tokens[:constants.MAX_WORDPIECES_DOC - 2 - 10 * cutting_counter]
                     sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)),
                                                                           add_special_tokens=False) + ["[SEP]"]
                 else:
-                    self.resize_index(idx,constants.MAX_TOKENS - 2 - 10*cutting_counter)
+                    self.resize_index(idx, constants.MAX_WORDPIECES_DOC - 2 - 10 * cutting_counter)
 
-            wordpieces.append(sent_wordpieces)
-            if len(sent_tokens) >= constants.MAX_TOKENS:
-                print(f"Sentence {idx} too many tokens in file {self.conllu_name}, skipping.")
-                indices_to_rm.append(idx)
-                number_examples -= 1
-            elif len(sent_wordpieces) >= constants.MAX_WORDPIECES:
-                print(f"Sentence {idx} too many wordpieces in file {self.conllu_name}, skipping.")
-                indices_to_rm.append(idx)
-                number_examples -= 1
+                wordpieces.append(sent_wordpieces)
+
+            else:
+                if len(sent_tokens) >= constants.MAX_TOKENS_SENT:
+                    print(f"Sentence {idx} too many tokens in file {self.conllu_name}, skipping.")
+                    indices_to_rm.append(idx)
+                    number_examples -= 1
+                elif len(sent_wordpieces) >= constants.MAX_WORDPIECES_SENT:
+                    print(f"Sentence {idx} too many wordpieces in file {self.conllu_name}, skipping.")
+                    indices_to_rm.append(idx)
+                    number_examples -= 1
+                else:
+                    wordpieces.append(sent_wordpieces)
 
         segments = []
         max_segment = []
@@ -169,8 +167,8 @@ class ConllWrapper():
             if sent_idx in indices_to_rm:
                 sent_idx += 1
                 continue
-            
-            sent_segments = np.zeros((constants.MAX_WORDPIECES,), dtype=np.int64) - 1
+
+            sent_segments = np.zeros((self.max_wordpieces,), dtype=np.int64) - 1
             segment_id = 0
             wordpiece_pointer = 1
             for token in sent_tokens:

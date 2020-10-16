@@ -4,7 +4,7 @@ import os
 import json
 from collections import defaultdict
 from itertools import chain
-from copy import copy
+from copy import deepcopy
 
 from transformers import BertTokenizer, TFBertModel
 
@@ -46,7 +46,7 @@ class TFRecordWrapper:
                     for task in tasks:
                         self.map_tfrecord[mode][model][lang][task] = None
 
-        self.map_conll = copy(self.map_tfrecord)
+        self.map_conll = deepcopy(self.map_tfrecord)
 
     def _from_json(self, data_dir):
         with open(os.path.join(data_dir,self.data_map_fn),'r') as in_json:
@@ -122,13 +122,13 @@ class TFRecordWriter(TFRecordWrapper):
                 in_datasets = [conllu_wrappers[task](conll_fn, tokenizer) for task in tasks]
                 all_wordpieces, all_segments, all_token_len = in_datasets[0].training_examples()
 
-                options = tf.io.TFRecordOptions(compression_type='GZIP')
+                options = tf.io.TFRecordOptions()#compression_type='GZIP')
                 with tf.io.TFRecordWriter(os.path.join(data_dir, tfrecord_file), options=options) as tf_writer:
                     for idx, (wordpieces, segments, token_len, target_mask) in \
                             tqdm(enumerate(
                                 zip(tf.unstack(all_wordpieces), tf.unstack(all_segments), tf.unstack(all_token_len),
                                     self.generate_target_masks(tasks, in_datasets))), desc="Embedding computation"):
-                        embeddings = self.calc_embeddings(model, wordpieces, segments, token_len)
+                        embeddings = self.calc_embeddings(model, wordpieces, segments, token_len, in_datasets[0].max_wordpieces)
                         train_example = self.serialize_example(idx, embeddings, token_len, target_mask)
                         tf_writer.write(train_example.SerializeToString())
         self._to_json(data_dir)
@@ -146,7 +146,7 @@ class TFRecordWriter(TFRecordWrapper):
         return model, tokenizer
 
     @staticmethod
-    def calc_embeddings(model, wordpieces, segments, token_len):
+    def calc_embeddings(model, wordpieces, segments, token_len, max_wordpieces):
         wordpieces = tf.expand_dims(wordpieces, 0)
         segments = tf.expand_dims(segments, 0)
         max_token_len = tf.constant(token_len, shape=(1,), dtype=tf.int64)
@@ -158,7 +158,7 @@ class TFRecordWriter(TFRecordWrapper):
         # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same
         embeddings = [tf.map_fn(lambda x: tf.math.unsorted_segment_mean(x[0], x[1], x[2]),
                                 (emb, segments, max_token_len), dtype=tf.float32) for emb in embeddings]
-        embeddings = [tf.pad(tf.squeeze(emb, axis=[0]), [[0, constants.MAX_WORDPIECES - token_len], [0, 0]]) for emb in embeddings]
+        embeddings = [tf.pad(tf.squeeze(emb, axis=[0]), [[0, max_wordpieces - token_len], [0, 0]]) for emb in embeddings]
         return embeddings
 
     @staticmethod
@@ -222,7 +222,7 @@ class TFRecordReader(TFRecordWrapper):
                                          f" supported languages: {self.tasks}")
                     tfr_fn = os.path.join(self.data_dir, self.map_tfrecord[mode][self.model_name][lang][task])
                     data_set[lang][task] = tf.data.TFRecordDataset(tfr_fn,
-                                                                   compression_type='GZIP',
+                                                                   #compression_type='GZIP',
                                                                    buffer_size=constants.BUFFER_SIZE)
 
             self.__setattr__(mode, data_set)
