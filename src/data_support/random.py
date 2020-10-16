@@ -1,18 +1,15 @@
 import numpy as np
 import tensorflow as tf
-import network as nx
 
 import constants
 from data_support.dependency import DependencyDistance, DependencyDepth
-from data_support.conll_wrapper import ConllWrapper
-
 
 
 class RandomDistance(DependencyDistance):
 
 	max_wordpieces = constants.MAX_WORDPIECES_SENT
 
-	def __init__(self, conll_file, bert_tokenizer):
+	def __init__(self, conll_file, bert_tokenizer, lang='en'):
 		super().__init__(conll_file, bert_tokenizer)
 
 
@@ -48,7 +45,7 @@ class RandomDepth(DependencyDepth):
 
 	max_wordpieces = constants.MAX_WORDPIECES_SENT
 
-	def __init__(self, conll_file, bert_tokenizer):
+	def __init__(self, conll_file, bert_tokenizer, lang='en'):
 		super().__init__(conll_file, bert_tokenizer)
 
 	def target_and_mask(self):
