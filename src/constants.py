@@ -1,7 +1,10 @@
 from nltk.corpus import wordnet as wn
 # Wordpieces | Tokens limits
-MAX_TOKENS = 512
-MAX_WORDPIECES = 512
+MAX_TOKENS_SENT = 128
+MAX_WORDPIECES_SENT = 128
+
+MAX_TOKENS_DOC = 512
+MAX_WORDPIECES_DOC = 512
 
 # Conllu indices
 CONLLU_ID = 0
