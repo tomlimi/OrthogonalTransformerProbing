@@ -9,8 +9,8 @@ class DependencyDistance(ConllWrapper):
 
     max_wordpieces = constants.MAX_WORDPIECES_SENT
 
-    def __init__(self, conll_file, bert_tokenizer, lang=None):
-        super().__init__(conll_file, bert_tokenizer, resize_examples=False)
+    def __init__(self, conll_file, bert_tokenizer):
+        super().__init__(conll_file, bert_tokenizer)
 
     def target_and_mask(self):
         """Computes the distances between all pairs of words; returns them as a tensor.
@@ -88,8 +88,8 @@ class DependencyDepth(ConllWrapper):
 
     max_wordpieces = constants.MAX_WORDPIECES_SENT
 
-    def __init__(self, conll_file, bert_tokenizer, lang=None):
-        super().__init__(conll_file, bert_tokenizer, resize_examples=False)
+    def __init__(self, conll_file, bert_tokenizer):
+        super().__init__(conll_file, bert_tokenizer)
 
     def target_and_mask(self):
         """Computes the depth of each word; returns them as a tensor.

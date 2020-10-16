@@ -116,6 +116,10 @@ class TFRecordWriter(TFRecordWrapper):
             do_lower_case = "uncased" in model_path
             model, tokenizer = self.get_model_tokenizer(model_path, do_lower_case=do_lower_case)
             for tfrecord_file in self.model2tfrs[model_path]:
+                if os.path.isfile(tfrecord_file):
+                    print(f"File {tfrecord_file} already exists, skipping!")
+                    continue
+
                 conll_fn = self.tfr2conll[tfrecord_file]
                 tasks = list(self.tfr2tasks[tfrecord_file])
 
