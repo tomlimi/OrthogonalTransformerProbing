@@ -147,8 +147,6 @@ class ConllWrapper():
                 else:
                     self.resize_index(idx, constants.MAX_WORDPIECES_DOC - 2 - 10 * cutting_counter)
 
-                wordpieces.append(sent_wordpieces)
-
             else:
                 if len(sent_tokens) >= constants.MAX_TOKENS_SENT:
                     print(f"Sentence {idx} too many tokens in file {self.conllu_name}, skipping.")
@@ -158,8 +156,8 @@ class ConllWrapper():
                     print(f"Sentence {idx} too many wordpieces in file {self.conllu_name}, skipping.")
                     indices_to_rm.append(idx)
                     number_examples -= 1
-                else:
-                    wordpieces.append(sent_wordpieces)
+
+            wordpieces.append(sent_wordpieces)
 
         segments = []
         max_segment = []
