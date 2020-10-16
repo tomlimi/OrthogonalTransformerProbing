@@ -11,7 +11,7 @@ class LexicalDistance(ConllWrapper):
 
     max_wordpieces = constants.MAX_WORDPIECES_SENT
 
-    def __init__(self, conll_file, bert_tokenizer):
+    def __init__(self, conll_file, bert_tokenizer, lang='en'):
         super().__init__(conll_file, bert_tokenizer)
         if lang not in constants.lang2iso:
             raise ValueError(f'Language {lang} is not supported by Open Multilingual Wordnet')
@@ -91,7 +91,7 @@ class LexicalDepth(ConllWrapper):
 
     max_wordpieces = constants.MAX_WORDPIECES_SENT
 
-    def __init__(self, conll_file, bert_tokenizer):
+    def __init__(self, conll_file, bert_tokenizer, lang='en'):
         super().__init__(conll_file, bert_tokenizer)
         if lang not in constants.lang2iso:
             raise ValueError(f'Language {lang} is not supported by Open Multilingual Wordnet')

@@ -12,6 +12,7 @@ import constants
 from data_support.dependency import DependencyDistance, DependencyDepth
 from data_support.lexical import LexicalDistance, LexicalDepth
 from data_support.coreference import CoreferenceDistance
+from data_support.random import RandomDistance, RandomDepth
 
 
 conllu_wrappers = {
@@ -21,7 +22,9 @@ conllu_wrappers = {
     "lex_depth": LexicalDepth,
     # "der_distance": DerivationDistance,
     # "der_depth": DerivationDepth,
-    'cor_distance': CoreferenceDistance
+    "cor_distance": CoreferenceDistance,
+    "rnd_depth": RandomDepth,
+    "rnd_distance": RandomDistance
 }
 
 
@@ -34,7 +37,6 @@ class TFRecordWrapper:
         self.tasks = tasks
         self.models = models
         self.languages = list(set(languages))
-        #self.map_conll = map_conll
 
         self.map_tfrecord = dict()
         for mode in self.modes:
@@ -94,8 +96,8 @@ class TFRecordWriter(TFRecordWrapper):
             for model in models:
                 for task in tasks.split(','):
                     # Data for some tasks can be saved in the same file, e.g. dependency and lexical
-                    if task in ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth']:
-                        fn_task = 'dep+lex'
+                    if task in ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'rnd_distance', 'rnd_depth']:
+                        fn_task = 'dep+lex+rnd'
                     elif task == 'cor_distance':
                         fn_task = 'cor'
                     else:
@@ -116,8 +118,8 @@ class TFRecordWriter(TFRecordWrapper):
             do_lower_case = "uncased" in model_path
             model, tokenizer = self.get_model_tokenizer(model_path, do_lower_case=do_lower_case)
             for tfrecord_file in self.model2tfrs[model_path]:
-                if os.path.isfile(tfrecord_file):
-                    print(f"File {tfrecord_file} already exists, skipping!")
+                if os.path.isfile(os.path.join(data_dir, tfrecord_file)):
+                    print(f"File {os.path.join(data_dir, tfrecord_file)} already exists, skipping!")
                     continue
 
                 conll_fn = self.tfr2conll[tfrecord_file]
