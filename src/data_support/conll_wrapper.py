@@ -1,18 +1,21 @@
 import numpy as np
 import tensorflow as tf
 from collections import defaultdict
+import networkx as nx
 
 import constants
 
+RANDOM_SEED = 2019
 
 class ConllWrapper():
 
     max_wordpieces = None
 
-    def __init__(self, conll_file, bert_tokenizer, resize_examples):
+    def __init__(self, conll_file, bert_tokenizer):
 
         self.conllu_name = conll_file
         self.tokenizer = bert_tokenizer
+        self.random_state = np.random.RandomState(RANDOM_SEED)
 
         self.tokens = []
         self.lemmas = []
@@ -22,7 +25,6 @@ class ConllWrapper():
         self.coreferences = []
 
         self.read_conllu(conll_file)
-        self.training_examples(resize_examples)
 
     @property
     def unlabeled_relations(self):
@@ -119,7 +121,7 @@ class ConllWrapper():
         input_ids = token_ids + [0] * (self.max_wordpieces - len(wordpieces))
         return input_ids
 
-    def training_examples(self, resize_examples=False):
+    def training_examples(self):
         '''
         Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
         :param wordpieces_all: lists of BPE pieces for each sentence
@@ -189,4 +191,22 @@ class ConllWrapper():
 
         return tf.stack(bert_ids), tf.stack(segments), tf.constant(max_segment, dtype=tf.int64)
 
+    def generate_random_tree(self, sentence_length):
+
+        def add_edges(node_idx):
+            edges = []
+            for dep_node in generated_tree[node_idx]:
+                if dep_node not in visited:
+                    visited.add(dep_node)
+                    edges.append((dep_node + 1, node_idx + 1))
+                    edges += add_edges(dep_node)
+            return edges
+
+        generated_tree = nx.to_dict_of_lists(nx.generators.trees.random_tree(sentence_length, seed=self.random_state))
+        random_root = self.random_state.randint(0, sentence_length)
+
+        visited = {random_root}
+        random_tree = [(random_root + 1, 0)] + add_edges(random_root)
+        random_tree = sorted(random_tree, key=lambda edge: edge[0])
+        return random_tree
 

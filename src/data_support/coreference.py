@@ -15,8 +15,8 @@ class CoreferenceDistance(ConllWrapper):
 
 	max_wordpieces = constants.MAX_WORDPIECES_DOC
 
-	def __init__(self, conll_file, bert_tokenizer, lang=None):
-		super().__init__(conll_file, bert_tokenizer, resize_examples=True)
+	def __init__(self, conll_file, bert_tokenizer):
+		super().__init__(conll_file, bert_tokenizer)
 
 	@staticmethod
 	def process_coreference(coref, coreference_line):
