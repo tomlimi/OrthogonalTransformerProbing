@@ -8,7 +8,7 @@ import constants
 from data_support.conll_wrapper import ConllWrapper
 
 
-MAX_COREF_DISTANCE = 5
+MAX_COREF_DISTANCE = 20
 
 
 class CoreferenceDistance(ConllWrapper):
@@ -113,7 +113,7 @@ class CoreferenceDistance(ConllWrapper):
 			coreferents_distances = self.coreferents_distances(coreferents_list)
 			for i in range(sentence_length):
 				for j in range(i, sentence_length):
-					if coreferents_list[i] and coreferents_list[j]:
+					if coreferents_list[i] or coreferents_list[j]:
 
 						i_j_distance = self.distance_between_pairs(coreferents_distances, coreferents_list, i, j)
 						sentence_distances[i, j] = i_j_distance
@@ -143,17 +143,19 @@ class CoreferenceDistance(ConllWrapper):
 		corefs_i = coreferents_list[i]
 		corefs_j = coreferents_list[j]
 
-		if set(corefs_i) & set(corefs_j):
-			return 0
-		else:
-			return MAX_COREF_DISTANCE
-
-		# if not corefs_i or not corefs_j:
+		# if set(corefs_i) & set(corefs_j):
+		# 	return 0
+		# else:
 		# 	return MAX_COREF_DISTANCE
 		#
-		# coref_distance = MAX_COREF_DISTANCE
-		# for coref_i in corefs_i:
-		# 	for coref_j in corefs_j:
-		# 		if coref_j in coreferents_distances[coref_i]:
-		# 			coref_distance = min(coref_distance, coreferents_distances[coref_i][coref_j])
-		# return coref_distance
+		# if not corefs_i or not corefs_j:
+		# 	return MAX_COREF_DISTANCE
+
+		coref_distance = MAX_COREF_DISTANCE
+		for coref_i in corefs_i:
+			for coref_j in corefs_j:
+				if coref_j in coreferents_distances[coref_i]:
+					coref_distance = min(coref_distance, coreferents_distances[coref_i][coref_j] + 1)
+					# + 1 here because distance between corferents should be also positive to distinguish
+					# from the same word
+		return coref_distance
