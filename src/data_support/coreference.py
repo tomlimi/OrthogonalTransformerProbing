@@ -10,6 +10,9 @@ from data_support.conll_wrapper import ConllWrapper
 
 MAX_COREF_DISTANCE = 20
 
+# look only at the coreferents that are nouns or pronouns
+COREF_POS_LIST = ['NN', 'NNS', 'NNP', 'NNPS', 'PRP', 'PRP$', 'WP', 'WP$', 'WRB']
+
 
 class CoreferenceDistance(ConllWrapper):
 
@@ -49,6 +52,7 @@ class CoreferenceDistance(ConllWrapper):
 	def read_conllu(self, conll_file_path, lang='en'):
 		sentence_tokens = []
 		sentence_coreference = []
+		sentence_pos = []
 
 		with open(conll_file_path, 'r') as in_conllu:
 			sentid = 0
@@ -64,6 +68,9 @@ class CoreferenceDistance(ConllWrapper):
 					self.coreferences.append(sentence_coreference)
 					sentence_coreference = []
 
+					self.pos.append(sentence_pos)
+					sentence_pos = []
+
 					sentid += 1
 				elif line.startswith('#'):
 					actual_sent_id = int(line[-5:])
@@ -75,6 +82,8 @@ class CoreferenceDistance(ConllWrapper):
 						sentence_tokens.append(fields[constants.CONLLU_ORTH])
 						coref, curr_coref = self.process_coreference(curr_coref, fields[constants.CONLL_COREF])
 						sentence_coreference.append(coref)
+
+						sentence_pos.append(fields[constants.CONLL_POS])
 
 	@staticmethod
 	def coreferents_distances(coreference_list):
@@ -103,7 +112,7 @@ class CoreferenceDistance(ConllWrapper):
 		seq_mask = tf.expand_dims(seq_mask, 1)
 		seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 
-		for coreferents_list, sentence_seq_mask in zip(self.coreferences, tf.unstack(seq_mask)):
+		for coreferents_list, sentence_pos, sentence_seq_mask in zip(self.coreferences, self.pos, tf.unstack(seq_mask)):
 			sentence_length = min(len(coreferents_list),
 			                      constants.MAX_TOKENS_DOC)  # All observation fields must be of same length
 			sentence_distances = np.zeros((constants.MAX_TOKENS_DOC, constants.MAX_TOKENS_DOC), dtype=np.float32)
@@ -113,7 +122,7 @@ class CoreferenceDistance(ConllWrapper):
 			coreferents_distances = self.coreferents_distances(coreferents_list)
 			for i in range(sentence_length):
 				for j in range(i, sentence_length):
-					if coreferents_list[i] or coreferents_list[j]:
+					if sentence_pos[i] in COREF_POS_LIST and sentence_pos[j] in COREF_POS_LIST :
 
 						i_j_distance = self.distance_between_pairs(coreferents_distances, coreferents_list, i, j)
 						sentence_distances[i, j] = i_j_distance
