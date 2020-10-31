@@ -15,6 +15,7 @@ CONLLU_FEATS = 5
 CONLLU_HEAD = 6
 CONLLU_LABEL = 7
 
+CONLL_POS = 5
 CONLL_COREF = 16
 
 # WordNet constants

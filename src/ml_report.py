@@ -11,7 +11,6 @@ from reporting.reporter import CorrelationReporter, GatedCorrelationReporter
 
 import constants
 
-#TODO: Reorganize and check reporting!
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	#
