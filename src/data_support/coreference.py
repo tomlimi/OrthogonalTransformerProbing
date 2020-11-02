@@ -185,5 +185,7 @@ class CoreferenceDistance(ConllWrapper):
 		for coref_i in corefs_i:
 			for coref_j in corefs_j:
 				if coref_j in coreferents_distances[coref_i]:
-					coref_distance = min(coref_distance, coreferents_distances[coref_i][coref_j])
+					coref_distance = min(coref_distance, coreferents_distances[coref_i][coref_j] + 1)
+					# + 1 here because distance between corferents should be also positive to distinguish
+					# from the same word
 		return coref_distance
