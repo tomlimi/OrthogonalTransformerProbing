@@ -3,9 +3,6 @@ from nltk.corpus import wordnet as wn
 MAX_TOKENS = 128
 MAX_WORDPIECES = 128
 
-# MAX_TOKENS_DOC = 128
-# MAX_WORDPIECES_DOC = 128
-
 # Conllu indices
 CONLLU_ID = 0
 CONLLU_ORTH = 1
