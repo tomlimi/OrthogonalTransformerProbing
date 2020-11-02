@@ -3,6 +3,7 @@ import tensorflow as tf
 from itertools import combinations, chain
 from collections import defaultdict
 import networkx as nx
+import re
 
 import constants
 from data_support.conll_wrapper import ConllWrapper
@@ -55,8 +56,8 @@ class CoreferenceDistance(ConllWrapper):
 		sentence_pos = []
 
 		with open(conll_file_path, 'r') as in_conllu:
-			sentid = 0
-			actual_sent_id = 0
+			docid = 0
+			sentindoc = 0
 
 			curr_coref = []
 			for line in in_conllu:
@@ -71,13 +72,32 @@ class CoreferenceDistance(ConllWrapper):
 					self.pos.append(sentence_pos)
 					sentence_pos = []
 
-					sentid += 1
+					docid += 1
+					sentindoc = 0
+
 				elif line.startswith('#'):
-					actual_sent_id = int(line[-5:])
 					continue
 				else:
 					fields = line.strip().split('\t')
 					if fields[constants.CONLLU_ID].isdigit():
+
+						sentids = re.findall(r"-s[0-9]+-", fields[constants.CONLL_NODE])
+						if len(sentids) != 1:
+							raise ValueError("Wrong format of node name in conll file!")
+						sentid = int(sentids[0][2:-1])
+
+						# One train example will consist of two sentences at mosts.
+						if sentid > sentindoc:
+							sentindoc = sentid
+							if sentindoc != 1 and sentindoc % 2 == 1:
+								self.tokens.append(sentence_tokens)
+								sentence_tokens = []
+
+								self.coreferences.append(sentence_coreference)
+								sentence_coreference = []
+
+								self.pos.append(sentence_pos)
+								sentence_pos = []
 
 						sentence_tokens.append(fields[constants.CONLLU_ORTH])
 						coref, curr_coref = self.process_coreference(curr_coref, fields[constants.CONLL_COREF])

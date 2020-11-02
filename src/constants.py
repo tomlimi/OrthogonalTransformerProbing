@@ -17,6 +17,7 @@ CONLLU_LABEL = 7
 
 CONLL_POS = 4
 CONLL_COREF = 16
+CONLL_NODE = 17
 
 # WordNet constants
 # we only consider NOUNs and VERBs, because there is no graph structure for other POS
