@@ -9,7 +9,7 @@ import constants
 from data_support.conll_wrapper import ConllWrapper
 
 
-MAX_COREF_DISTANCE = 20
+MAX_COREF_DISTANCE = 10
 
 # look only at the coreferents that are nouns or pronouns
 COREF_POS_LIST = ['NN', 'NNS', 'NNP', 'NNPS', 'PRP', 'PRP$', 'WP', 'WP$', 'WRB']
@@ -17,7 +17,7 @@ COREF_POS_LIST = ['NN', 'NNS', 'NNP', 'NNPS', 'PRP', 'PRP$', 'WP', 'WP$', 'WRB']
 
 class CoreferenceDistance(ConllWrapper):
 
-	max_wordpieces = constants.MAX_WORDPIECES_DOC
+	max_wordpieces = constants.MAX_WORDPIECES
 
 	def __init__(self, conll_file, bert_tokenizer, lang='en'):
 		super().__init__(conll_file, bert_tokenizer)
@@ -127,22 +127,23 @@ class CoreferenceDistance(ConllWrapper):
 		  mask: A tensor of shape (number of examples, sentence_length, sentence_length) specifying which elements of
 		  the target should be used during training.
 		"""
-		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS_DOC),
+		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
 		                   tf.float32)
 		seq_mask = tf.expand_dims(seq_mask, 1)
 		seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 
 		for coreferents_list, sentence_pos, sentence_seq_mask in zip(self.coreferences, self.pos, tf.unstack(seq_mask)):
 			sentence_length = min(len(coreferents_list),
-			                      constants.MAX_TOKENS_DOC)  # All observation fields must be of same length
-			sentence_distances = np.zeros((constants.MAX_TOKENS_DOC, constants.MAX_TOKENS_DOC), dtype=np.float32)
+			                      constants.MAX_TOKENS)  # All observation fields must be of same length
+			sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
 
-			sentence_mask = np.zeros((constants.MAX_TOKENS_DOC, constants.MAX_TOKENS_DOC), dtype=np.float32)
+			sentence_mask = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
 
 			coreferents_distances = self.coreferents_distances(coreferents_list)
 			for i in range(sentence_length):
 				for j in range(i, sentence_length):
-					if sentence_pos[i] in COREF_POS_LIST and sentence_pos[j] in COREF_POS_LIST :
+					if sentence_pos[i] in COREF_POS_LIST and sentence_pos[j] in COREF_POS_LIST \
+							and coreferents_list[i] and coreferents_list[j]:
 
 						i_j_distance = self.distance_between_pairs(coreferents_distances, coreferents_list, i, j)
 						sentence_distances[i, j] = i_j_distance
@@ -184,7 +185,5 @@ class CoreferenceDistance(ConllWrapper):
 		for coref_i in corefs_i:
 			for coref_j in corefs_j:
 				if coref_j in coreferents_distances[coref_i]:
-					coref_distance = min(coref_distance, coreferents_distances[coref_i][coref_j] + 1)
-					# + 1 here because distance between corferents should be also positive to distinguish
-					# from the same word
+					coref_distance = min(coref_distance, coreferents_distances[coref_i][coref_j])
 		return coref_distance

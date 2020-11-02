@@ -118,7 +118,7 @@ class ConllWrapper():
     def get_bert_ids(self, wordpieces):
         """Token ids from Tokenizer vocab"""
         token_ids = self.tokenizer.convert_tokens_to_ids(wordpieces)
-        input_ids = token_ids + [0] * (self.max_wordpieces - len(wordpieces))
+        input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
         return input_ids
 
     def training_examples(self):
@@ -137,27 +137,21 @@ class ConllWrapper():
         for idx, sent_tokens in enumerate(self.tokens[:]):
             sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)), add_special_tokens=False) + ["[SEP]"]
 
-            if self.max_wordpieces == constants.MAX_WORDPIECES_DOC:
-                cutting_counter = -1
-                while len(sent_tokens) >= constants.MAX_TOKENS_DOC or len(sent_wordpieces) >= constants.MAX_WORDPIECES_DOC:
-                    cutting_counter += 1
-                    sent_tokens = sent_tokens[:constants.MAX_WORDPIECES_DOC - 2 - 10 * cutting_counter]
-                    sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)),
-                                                                          add_special_tokens=False) + ["[SEP]"]
-                else:
-                    self.resize_index(idx, constants.MAX_WORDPIECES_DOC - 2 - 10 * cutting_counter)
-
-            else:
-                if len(sent_tokens) >= constants.MAX_TOKENS_SENT:
-                    print(f"Sentence {idx} too many tokens in file {self.conllu_name}, skipping.")
-                    indices_to_rm.append(idx)
-                    number_examples -= 1
-                elif len(sent_wordpieces) >= constants.MAX_WORDPIECES_SENT:
-                    print(f"Sentence {idx} too many wordpieces in file {self.conllu_name}, skipping.")
-                    indices_to_rm.append(idx)
-                    number_examples -= 1
+            if len(sent_tokens) >= constants.MAX_TOKENS:
+                print(f"Sentence {idx} too many tokens, in file {self.conllu_name}, skipping.")
+                indices_to_rm.append(idx)
+                number_examples -= 1
+            elif len(sent_wordpieces) >= constants.MAX_WORDPIECES:
+                print(f"Sentence {idx} too many wordpieces, in file {self.conllu_name}, skipping.")
+                indices_to_rm.append(idx)
+                number_examples -= 1
 
             wordpieces.append(sent_wordpieces)
+
+        if self.coreferences:
+            for idx, sent_corefernces in enumerate(self.coreferences):
+                if sum(1 for coref in sent_corefernces if coref) < 2:
+                    print(f"Sentence pair {idx} less then two coreferents, in file {self.conllu_name}, skipping.")
 
         segments = []
         max_segment = []
@@ -168,7 +162,7 @@ class ConllWrapper():
                 sent_idx += 1
                 continue
 
-            sent_segments = np.zeros((self.max_wordpieces,), dtype=np.int64) - 1
+            sent_segments = np.zeros((constants.MAX_WORDPIECES,), dtype=np.int64) - 1
             segment_id = 0
             wordpiece_pointer = 1
             for token in sent_tokens:
@@ -178,7 +172,7 @@ class ConllWrapper():
                 segment_id += 1
 
             if wordpiece_pointer+1 != len(sent_wordpieces):
-                print(f'Sentence {sent_idx} mismatch in number of tokens, skipped!')
+                print(f'Sentence {sent_idx} mismatch in number of tokens, in file {self.conllu_name}, skipping.')
                 indices_to_rm.append(sent_idx)
             else:
                 segments.append(tf.constant(sent_segments, dtype=tf.int64))

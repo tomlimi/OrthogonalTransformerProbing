@@ -1,10 +1,10 @@
 from nltk.corpus import wordnet as wn
 # Wordpieces | Tokens limits
-MAX_TOKENS_SENT = 128
-MAX_WORDPIECES_SENT = 128
+MAX_TOKENS = 128
+MAX_WORDPIECES = 128
 
-MAX_TOKENS_DOC = 512
-MAX_WORDPIECES_DOC = 512
+# MAX_TOKENS_DOC = 128
+# MAX_WORDPIECES_DOC = 128
 
 # Conllu indices
 CONLLU_ID = 0
@@ -63,4 +63,4 @@ BERT_MODEL_DIR = "/net/projects/bert/models/"
 
 #data pipeline options
 BUFFER_SIZE = 50 * 1000 * 1000
-SHUFFLE_SIZE = 512
+SHUFFLE_SIZE = 1024

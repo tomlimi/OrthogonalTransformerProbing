@@ -134,7 +134,7 @@ class TFRecordWriter(TFRecordWrapper):
                             tqdm(enumerate(
                                 zip(tf.unstack(all_wordpieces), tf.unstack(all_segments), tf.unstack(all_token_len),
                                     self.generate_target_masks(tasks, in_datasets))), desc="Embedding computation"):
-                        embeddings = self.calc_embeddings(model, wordpieces, segments, token_len, in_datasets[0].max_wordpieces)
+                        embeddings = self.calc_embeddings(model, wordpieces, segments, token_len, constants.MAX_WORDPIECES)
                         train_example = self.serialize_example(idx, embeddings, token_len, target_mask)
                         tf_writer.write(train_example.SerializeToString())
         self._to_json(data_dir)

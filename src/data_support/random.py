@@ -7,7 +7,7 @@ from data_support.dependency import DependencyDistance, DependencyDepth
 
 class RandomDistance(DependencyDistance):
 
-	max_wordpieces = constants.MAX_WORDPIECES_SENT
+	max_wordpieces = constants.MAX_WORDPIECES
 
 	def __init__(self, conll_file, bert_tokenizer, lang='en'):
 		super().__init__(conll_file, bert_tokenizer)
@@ -22,14 +22,14 @@ class RandomDistance(DependencyDistance):
 		  mask: A tensor of shape (number of examples, sentence_length, sentence_length) specifying which elements of
 		  the target should be used during training.
 		"""
-		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS_SENT),
+		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
 		                   tf.float32)
 		seq_mask = tf.expand_dims(seq_mask, 1)
 		seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
 
 		for sent_tokens, sentence_mask in zip(self.tokens, tf.unstack(seq_mask)):
-			sentence_length = min(len(sent_tokens), constants.MAX_TOKENS_SENT)  # All observation fields must be of same length
-			sentence_distances = np.zeros((constants.MAX_TOKENS_SENT, constants.MAX_TOKENS_SENT), dtype=np.float32)
+			sentence_length = min(len(sent_tokens), constants.MAX_TOKENS)  # All observation fields must be of same length
+			sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
 
 			random_tree = self.generate_random_tree(sentence_length)
 			for i in range(sentence_length):
@@ -43,7 +43,7 @@ class RandomDistance(DependencyDistance):
 
 class RandomDepth(DependencyDepth):
 
-	max_wordpieces = constants.MAX_WORDPIECES_SENT
+	max_wordpieces = constants.MAX_WORDPIECES
 
 	def __init__(self, conll_file, bert_tokenizer, lang='en'):
 		super().__init__(conll_file, bert_tokenizer)
@@ -56,12 +56,12 @@ class RandomDepth(DependencyDepth):
 		  mask: A tensor of shape (number of examples, sentence_length) specifying which elements of the target
 		  should be used during training.
 		"""
-		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS_SENT),
+		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
 		                   tf.float32)
 
 		for sent_tokens, sentence_mask in zip(self.tokens, tf.unstack(seq_mask)):
-			sentence_length = min(len(sent_tokens), constants.MAX_TOKENS_SENT)  # All observation fields must be of same length
-			sentence_depths = np.zeros(constants.MAX_TOKENS_SENT, dtype=np.float32)
+			sentence_length = min(len(sent_tokens), constants.MAX_TOKENS)  # All observation fields must be of same length
+			sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
 
 			random_tree = self.generate_random_tree(sentence_length)
 			for i in range(sentence_length):
