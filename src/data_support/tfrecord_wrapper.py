@@ -13,18 +13,19 @@ from data_support.dependency import DependencyDistance, DependencyDepth
 from data_support.lexical import LexicalDistance, LexicalDepth
 from data_support.coreference import CoreferenceDistance
 from data_support.random import RandomDistance, RandomDepth
+from data_support.positional import PositionalDistance, PositionalDepth
 
 
 conllu_wrappers = {
-    "dep_distance": DependencyDistance,
-    "dep_depth": DependencyDepth,
-    "lex_distance": LexicalDistance,
-    "lex_depth": LexicalDepth,
-    # "der_distance": DerivationDistance,
-    # "der_depth": DerivationDepth,
-    "cor_distance": CoreferenceDistance,
-    "rnd_depth": RandomDepth,
-    "rnd_distance": RandomDistance
+	"dep_distance": DependencyDistance,
+	"dep_depth": DependencyDepth,
+	"lex_distance": LexicalDistance,
+	"lex_depth": LexicalDepth,
+	"cor_distance": CoreferenceDistance,
+	"rnd_depth": RandomDepth,
+	"rnd_distance": RandomDistance,
+	"pos_depth": PositionalDepth,
+	"pos_distance": PositionalDistance
 }
 
 
@@ -96,8 +97,9 @@ class TFRecordWriter(TFRecordWrapper):
             for model in models:
                 for task in tasks.split(','):
                     # Data for some tasks can be saved in the same file, e.g. dependency and lexical
-                    if task in ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'rnd_distance', 'rnd_depth']:
-                        fn_task = 'dep+lex+rnd'
+                    if task in ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'rnd_distance', 'rnd_depth',
+                                'pos_distance', 'pos_depth']:
+                        fn_task = 'dep+lex+rnd+pos'
                     elif task == 'cor_distance':
                         fn_task = 'cor'
                     else:

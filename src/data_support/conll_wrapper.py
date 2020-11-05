@@ -7,6 +7,7 @@ import constants
 
 RANDOM_SEED = 2019
 
+
 class ConllWrapper():
 
     max_wordpieces = None
