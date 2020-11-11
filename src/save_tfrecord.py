@@ -15,9 +15,12 @@ if __name__ == "__main__":
 	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	models = [args.bert_path]
 	languages = ['en']
-	data_spec = [('train', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth', '../resources/endev.conllu'),
-	             ('dev', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth', '../resources/endev.conllu'),
-	             ('test', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth', '../resources/endev.conllu'),
+	data_spec = [('train', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_distance,rnd_depth,pos_distance,pos_depth',
+	              '../resources/endev.conllu'),
+	             ('dev', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_depth,pos_distance,pos_depth',
+	              '../resources/endev.conllu'),
+	             ('test', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_depth,pos_distance,pos_depth',
+	              '../resources/endev.conllu'),
 	             ('train', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll'),
 	             ('dev', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll'),
 	             ('test', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll')

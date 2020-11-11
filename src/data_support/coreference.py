@@ -141,7 +141,7 @@ class CoreferenceDistance(ConllWrapper):
 
 			coreferents_distances = self.coreferents_distances(coreferents_list)
 			for i in range(sentence_length):
-				for j in range(i, sentence_length):
+				for j in range(i+1, sentence_length):
 					if sentence_pos[i] in COREF_POS_LIST and sentence_pos[j] in COREF_POS_LIST \
 							and coreferents_list[i] and coreferents_list[j]:
 
