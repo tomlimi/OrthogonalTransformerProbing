@@ -26,9 +26,9 @@ pos2wnpos = {"NOUN": wn.NOUN,
 lang2iso = {'en': 'eng', 'es': 'spa', 'fi': 'fin', 'pl': 'pol', 'ar': 'arb', 'id': 'ind', 'zh': 'cmn', 'fr': 'fra'}
 
 # BERT model parameters
-LANGUAGE_ENGLISH = "english"
-LANGUAGE_CHINESE = "chinese"
-LANGUAGE_MULTILINGUAL = "multilingual"
+LANGUAGE_ENGLISH = ""
+LANGUAGE_CHINESE = "-chinese"
+LANGUAGE_MULTILINGUAL = "-multilingual"
 
 SIZE_BASE = "base"
 SIZE_LARGE = "large"
@@ -36,24 +36,24 @@ SIZE_LARGE = "large"
 CASING_CASED = "cased"
 CASING_UNCASED = "uncased"
 
-MODEL_DIMS = {f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 768,
-              f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 768,
-              f"bert-{SIZE_BASE}-{LANGUAGE_ENGLISH}-{CASING_CASED}": 768,
-              f"bert-{SIZE_BASE}-{LANGUAGE_ENGLISH}-{CASING_UNCASED}": 768,
-              f"bert-{SIZE_LARGE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 1024,
-              f"bert-{SIZE_LARGE}-{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 1024,
+MODEL_DIMS = {f"bert-{SIZE_BASE}{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 768,
+              f"bert-{SIZE_BASE}{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 768,
+              f"bert-{SIZE_BASE}-{CASING_CASED}": 768,
+              f"bert-{SIZE_BASE}-{CASING_UNCASED}": 768,
+              f"bert-{SIZE_LARGE}{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 1024,
+              f"bert-{SIZE_LARGE}{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 1024,
               f"bert-{SIZE_LARGE}-{LANGUAGE_ENGLISH}-{CASING_CASED}": 1024,
               f"bert-{SIZE_LARGE}-{LANGUAGE_ENGLISH}-{CASING_UNCASED}": 1024
               }
 
-MODEL_LAYERS = {f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 12,
-                f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 12,
-                f"bert-{SIZE_BASE}-{LANGUAGE_ENGLISH}-{CASING_CASED}": 12,
-                f"bert-{SIZE_BASE}-{LANGUAGE_ENGLISH}-{CASING_UNCASED}": 12,
-                f"bert-{SIZE_LARGE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 24,
-                f"bert-{SIZE_LARGE}-{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 24,
-                f"bert-{SIZE_LARGE}-{LANGUAGE_ENGLISH}-{CASING_CASED}": 24,
-                f"bert-{SIZE_LARGE}-{LANGUAGE_ENGLISH}-{CASING_UNCASED}": 24
+MODEL_LAYERS = {f"bert-{SIZE_BASE}{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 12,
+                f"bert-{SIZE_BASE}{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 12,
+                f"bert-{SIZE_BASE}-{CASING_CASED}": 12,
+                f"bert-{SIZE_BASE}-{CASING_UNCASED}": 12,
+                f"bert-{SIZE_LARGE}{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 24,
+                f"bert-{SIZE_LARGE}{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 24,
+                f"bert-{SIZE_LARGE}-{CASING_CASED}": 24,
+                f"bert-{SIZE_LARGE}-{CASING_UNCASED}": 24
                 }
 
 BERT_MODEL_DIR = "/net/projects/bert/models/"

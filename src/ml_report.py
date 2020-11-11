@@ -65,7 +65,7 @@ if __name__ == "__main__":
 	if not os.path.exists(args.out_dir):
 		os.mkdir(args.out_dir)
 
-	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
+	args.bert_path = "bert-{}{}-{}".format(args.size, args.language, args.casing)
 	do_lower_case = (args.casing == "uncased")
 
 	tf_reader = TFRecordReader(args.data_dir, args.bert_path)

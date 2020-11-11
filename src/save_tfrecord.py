@@ -12,7 +12,7 @@ if __name__ == "__main__":
 	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
 	args = parser.parse_args()
 
-	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
+	args.bert_path = "bert-{}{}-{}".format(args.size, args.language, args.casing)
 	models = [args.bert_path]
 	languages = ['en']
 	data_spec = [('train', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_distance,rnd_depth,pos_distance,pos_depth',
