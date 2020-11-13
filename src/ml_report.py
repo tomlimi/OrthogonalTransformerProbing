@@ -2,10 +2,14 @@ import os
 import argparse
 import json
 
+from data_support.conll_wrapper import ConllWrapper
 from data_support.tfrecord_wrapper import TFRecordReader
 from network import Network
 
 from reporting.reporter import CorrelationReporter, GatedCorrelationReporter
+from reporting.reporter import UASReporter
+
+from transformers import BertTokenizer
 # from reporting.reporter import DependencyDistanceReporter, DependencyDepthReporter
 # from reporting.reporter import LexicalDistanceReporter,  LexicalDepthReporter
 
@@ -74,10 +78,18 @@ if __name__ == "__main__":
 	network = Network(args)
 	network.load(args)
 
-	# TODO: check correlation reporting for Derivational data
 	if args.probe_threshold:
 		reporter = GatedCorrelationReporter(args, network, tf_reader.test, 'test')
 	else:
 		reporter = CorrelationReporter(args, network, tf_reader.test, 'test')
-	reporter.predict(args)
-	reporter.write(args)
+	# reporter.predict(args)
+	# reporter.write(args)
+
+	if 'dep_distance' in args.tasks:
+		tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=do_lower_case)
+		conll_dict = {lang: ConllWrapper(tf_reader.map_conll['test'][args.bert_path][lang]['dep_distance'], tokenizer)
+		              for lang in args.languages}
+
+		uas_reporter = UASReporter(args, network, tf_reader.test, 'test', conll_dict)
+		uas_reporter.predict(args)
+		uas_reporter.write(args)

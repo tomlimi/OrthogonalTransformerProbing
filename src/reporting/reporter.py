@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from network import Network
 
-from reporting.metrics import UUAS, RootAcc, Spearman
+from reporting.metrics import UAS, Spearman
 
 
 class Reporter():
@@ -161,6 +161,55 @@ class GatedCorrelationReporter(Reporter):
 							        in zip(tf.unstack(batch_mask), batch_num_tokens)]
 
 						self.spearman_d[language][task](gold_values, pred_values, mask)
+
+
+class UASReporter(Reporter):
+	def __init__(self, args, network, dataset, dataset_name, conll_dict):
+		super().__init__(network, dataset, dataset_name)
+		self.punctuation_masks = {lang: conll_data.punctuation_mask for lang, conll_data in conll_dict.items()}
+		self._languages = args.languages
+		self._tasks = args.tasks
+		self.uas = dict()
+
+	def write(self, args):
+		for language in self._languages:
+			prefix = '{}.{}.'.format(self.dataset_name, language)
+			with open(os.path.join(args.out_dir, prefix + 'uas'), 'w') as uuas_f:
+				uuas_f.write(str(self.uas[language].result())+'\n')
+
+	def predict(self, args):
+		test = {lang: Network.data_pipeline(self.dataset, [lang], ['dep_distance'], args, mode='test')
+		        for lang in self._languages}
+
+		for language in self._languages:
+			self.uas[language] = UAS()
+			progressbar = tqdm(enumerate(test[language]), desc="Predicting UAS, {}".format(language))
+			for batch_idx, (_, _, batch) in progressbar:
+				conll_indices, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
+
+				pred_values = self.network.distance_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
+				                                                           language, 'dep_distance')
+				pred_values = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
+				               in zip(tf.unstack(pred_values), batch_num_tokens)]
+				gold_distances = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
+				                  in zip(tf.unstack(batch_target), batch_num_tokens)]
+
+				conll_indices = conll_indices.numpy()
+
+				for conll_idx, sent_predicted, sent_gold in zip(conll_indices, pred_values, gold_distances):
+
+					sent_punctuation_mask = self.punctuation_masks[language][conll_idx]
+					sent_predicted[sent_punctuation_mask, :] = np.inf
+					sent_predicted[:, sent_punctuation_mask] = np.inf
+					min_spanning_tree = sparse.csgraph.minimum_spanning_tree(sent_predicted).tocoo()
+					sent_predicted = set(map(frozenset, zip(min_spanning_tree.row + 1, min_spanning_tree.col + 1)))
+
+					sent_gold[sent_punctuation_mask, :] = np.inf
+					sent_gold[:, sent_punctuation_mask] = np.inf
+					min_spanning_tree_gold = sparse.csgraph.minimum_spanning_tree(sent_gold).tocoo()
+					sent_gold = set(map(frozenset, zip(min_spanning_tree_gold.row + 1, min_spanning_tree_gold.col + 1)))
+
+					self.uas[language].update_state(sent_gold, sent_predicted)
 
 
 # class DependencyDistanceReporter(Reporter):

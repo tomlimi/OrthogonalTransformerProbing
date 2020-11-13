@@ -26,7 +26,7 @@ class Metric:
         pass
     
 
-class UUAS(Metric):
+class UAS(Metric):
 
     def __init__(self):
         self.all_correct = 0
