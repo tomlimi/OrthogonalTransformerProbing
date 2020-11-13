@@ -26,7 +26,7 @@ class Network():
 
     class Probe():
         def __init__(self, args):
-            self.probe_rank = args.probe_rank
+            self.probe_rank = constants.MODEL_DIMS[args.bert_path]
             self.model_dim = constants.MODEL_DIMS[args.bert_path]
             self.languages = args.languages
 
@@ -49,12 +49,12 @@ class Network():
         @staticmethod
         @tf.function
         def ortho_reguralization(w):
-            """DSO implementation according to:
+            """(D)SO implementation according to:
             https://papers.nips.cc/paper/7680-can-we-gain-more-from-orthogonality-regularizations-in-training-deep-networks.pdf"""
             #
             w_cols = w.shape[0]
             w_rows = w.shape[1]
-            reg = tf.norm(tf.transpose(w) @ w - tf.eye(w_cols)) + tf.norm(w @ tf.transpose(w) - tf.eye(w_rows))
+            reg = tf.norm(tf.transpose(w) @ w - tf.eye(w_cols)) # + tf.norm(w @ tf.transpose(w) - tf.eye(w_rows))
             # to avoid NaN in gradient update
             if reg == 0:
                 reg = 1e-6
