@@ -26,7 +26,7 @@ if __name__ == "__main__":
 	             ('test', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll')
 	             ]
 
-	tasks = ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'cor_distance']
+	tasks = ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'cor_distance', 'pos_distance', 'pos_depth']
 
 	tf_writer = TFRecordWriter(models, data_spec)
 	tf_writer.compute_and_save(args.data_dir)

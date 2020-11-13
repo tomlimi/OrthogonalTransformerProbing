@@ -61,4 +61,4 @@ if __name__ == "__main__":
 
 	network = Network(args)
 
-	network.train(tf_reader,args)
+	network.train(tf_reader, args)
