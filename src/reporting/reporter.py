@@ -53,25 +53,25 @@ class CorrelationReporter(Reporter):
 				progressbar = tqdm(enumerate(test[language][task]), desc="Predicting, {}, {}".format(language, task))
 				for batch_idx, (_, _, batch) in progressbar:
 					_, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
-
+					sent_lens = list(batch_num_tokens.numpy())
 					if 'distance' in task:
 						pred_values = self.network.distance_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
 						                                                           language, task)
 						pred_values = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
-						               in zip(tf.unstack(pred_values), batch_num_tokens)]
+						               in zip(tf.unstack(pred_values), sent_lens)]
 						gold_values = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
-						               in zip(tf.unstack(batch_target), batch_num_tokens)]
+						               in zip(tf.unstack(batch_target), sent_lens)]
 						mask = [sent_mask.numpy().astype(bool)[:sent_len, :sent_len] for sent_mask, sent_len
-						        in zip(tf.unstack(batch_mask), batch_num_tokens)]
+						        in zip(tf.unstack(batch_mask), sent_lens)]
 					elif 'depth' in task:
 						pred_values = self.network.depth_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
 						                                                        language, task)
 						pred_values = [sent_predicted.numpy()[:sent_len] for sent_predicted, sent_len
-						               in zip(tf.unstack(pred_values), batch_num_tokens)]
+						               in zip(tf.unstack(pred_values), sent_lens)]
 						gold_values = [sent_gold.numpy()[:sent_len] for sent_gold, sent_len
-						               in zip(tf.unstack(batch_target), batch_num_tokens)]
+						               in zip(tf.unstack(batch_target), sent_lens)]
 						mask = [sent_mask.numpy().astype(bool)[:sent_len] for sent_mask, sent_len
-						        in zip(tf.unstack(batch_mask), batch_num_tokens)]
+						        in zip(tf.unstack(batch_mask), sent_lens)]
 
 					self.spearman_d[language][task](gold_values, pred_values, mask)
 
@@ -140,25 +140,25 @@ class GatedCorrelationReporter(Reporter):
 						_, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
 
 						embedding_gate = self.get_embedding_gate(task, part_to_drop)
-
+						sent_lens = list(batch_num_tokens.numpy())
 						if 'distance' in task:
 							pred_values = self.network.distance_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
 							                                                           language, task, embedding_gate)
 							pred_values = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
-							               in zip(tf.unstack(pred_values), batch_num_tokens)]
+							               in zip(tf.unstack(pred_values), sent_lens)]
 							gold_values = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
-							               in zip(tf.unstack(batch_target), batch_num_tokens)]
+							               in zip(tf.unstack(batch_target), sent_lens)]
 							mask = [sent_mask.numpy().astype(bool)[:sent_len, :sent_len] for sent_mask, sent_len
-							        in zip(tf.unstack(batch_mask), batch_num_tokens)]
+							        in zip(tf.unstack(batch_mask), sent_lens)]
 						elif 'depth' in task:
 							pred_values = self.network.depth_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
 							                                                        language, task, embedding_gate)
 							pred_values = [sent_predicted.numpy()[:sent_len] for sent_predicted, sent_len
-							               in zip(tf.unstack(pred_values), batch_num_tokens)]
+							               in zip(tf.unstack(pred_values), sent_lens)]
 							gold_values = [sent_gold.numpy()[:sent_len] for sent_gold, sent_len
-							               in zip(tf.unstack(batch_target), batch_num_tokens)]
+							               in zip(tf.unstack(batch_target), sent_lens)]
 							mask = [sent_mask.numpy().astype(bool)[:sent_len] for sent_mask, sent_len
-							        in zip(tf.unstack(batch_mask), batch_num_tokens)]
+							        in zip(tf.unstack(batch_mask), sent_lens)]
 
 						self.spearman_d[language][task](gold_values, pred_values, mask)
 
@@ -187,12 +187,13 @@ class UASReporter(Reporter):
 			for batch_idx, (_, _, batch) in progressbar:
 				conll_indices, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
 
+				sent_lens = list(batch_num_tokens.numpy())
 				pred_values = self.network.distance_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
 				                                                           language, 'dep_distance')
 				pred_values = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
-				               in zip(tf.unstack(pred_values), batch_num_tokens)]
+				               in zip(tf.unstack(pred_values), sent_lens)]
 				gold_distances = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
-				                  in zip(tf.unstack(batch_target), batch_num_tokens)]
+				                  in zip(tf.unstack(batch_target), sent_lens)]
 
 				conll_indices = conll_indices.numpy()
 
