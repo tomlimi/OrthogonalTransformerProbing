@@ -79,12 +79,10 @@ class ConllWrapper():
         sentence_tokens = []
         sentence_lemmas = []
         sentence_pos = []
-        sentence_coreference = []
 
         with open(conll_file_path, 'r') as in_conllu:
             sentid = 0
 
-            curr_coref = set()
             for line in in_conllu:
                 if line == '\n':
                     self.relations.append(sentence_relations)
@@ -95,9 +93,6 @@ class ConllWrapper():
                     sentence_lemmas = []
                     self.pos.append(sentence_pos)
                     sentence_pos = []
-                    self.coreferences.append(sentence_coreference)
-                    sentence_coreference = []
-                    coref_counter = defaultdict(int)
 
                     sentid += 1
                 elif line.startswith('#'):
@@ -153,6 +148,7 @@ class ConllWrapper():
             for idx, sent_corefernces in enumerate(self.coreferences):
                 if sum(1 for coref in sent_corefernces if coref) < 2:
                     print(f"Sentence pair {idx} less then two coreferents, in file {self.conllu_name}, skipping.")
+                    indices_to_rm.append(idx)
 
         segments = []
         max_segment = []
