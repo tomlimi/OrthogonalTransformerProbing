@@ -82,13 +82,16 @@ if __name__ == "__main__":
 		reporter = GatedCorrelationReporter(args, network, tf_reader.test, 'test')
 	else:
 		reporter = CorrelationReporter(args, network, tf_reader.test, 'test')
-	# reporter.predict(args)
-	# reporter.write(args)
+	reporter.predict(args)
+	reporter.write(args)
 
 	if 'dep_distance' in args.tasks:
 		tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=do_lower_case)
-		conll_dict = {lang: ConllWrapper(tf_reader.map_conll['test'][args.bert_path][lang]['dep_distance'], tokenizer)
-		              for lang in args.languages}
+		conll_dict = {}
+		for lang in args.languages:
+			lang_conll = ConllWrapper(tf_reader.map_conll['test'][args.bert_path][lang]['dep_distance'], tokenizer)
+			lang_conll.training_examples()
+			conll_dict[lang] = lang_conll
 
 		uas_reporter = UASReporter(args, network, tf_reader.test, 'test', conll_dict)
 		uas_reporter.predict(args)
