@@ -167,6 +167,7 @@ class UASReporter(Reporter):
 	def __init__(self, args, network, dataset, dataset_name, conll_dict):
 		super().__init__(network, dataset, dataset_name)
 		self.punctuation_masks = {lang: conll_data.punctuation_mask for lang, conll_data in conll_dict.items()}
+		self.uu_rels = {lang: conll_data.unlabeled_unordered_relations for lang, conll_data in conll_dict.items()}
 		self._languages = args.languages
 		self._tasks = args.tasks
 		self.uas = dict()
@@ -203,14 +204,16 @@ class UASReporter(Reporter):
 					sent_predicted[sent_punctuation_mask, :] = np.inf
 					sent_predicted[:, sent_punctuation_mask] = np.inf
 					min_spanning_tree = sparse.csgraph.minimum_spanning_tree(sent_predicted).tocoo()
-					sent_predicted = set(map(frozenset, zip(min_spanning_tree.row + 1, min_spanning_tree.col + 1)))
+					predicted = set(map(frozenset, zip(min_spanning_tree.row + 1, min_spanning_tree.col + 1)))
 
 					sent_gold[sent_punctuation_mask, :] = np.inf
 					sent_gold[:, sent_punctuation_mask] = np.inf
 					min_spanning_tree_gold = sparse.csgraph.minimum_spanning_tree(sent_gold).tocoo()
-					sent_gold = set(map(frozenset, zip(min_spanning_tree_gold.row + 1, min_spanning_tree_gold.col + 1)))
+					gold = set(map(frozenset, zip(min_spanning_tree_gold.row + 1, min_spanning_tree_gold.col + 1)))
+					#gold = set(self.uu_rels[language][conll_idx])
 
-					self.uas[language].update_state(sent_gold, sent_predicted)
+
+					self.uas[language].update_state(gold, predicted)
 
 
 # class DependencyDistanceReporter(Reporter):

@@ -33,7 +33,7 @@ class ConllWrapper():
 
     @property
     def punctuation_mask(self):
-        return [[pos_tag != "PUNCT" for pos_tag in sentence_pos] for sentence_pos in self.pos]
+        return [[pos_tag == "PUNCT" for pos_tag in sentence_pos] for sentence_pos in self.pos]
 
     @property
     def unlabeled_unordered_relations(self):
