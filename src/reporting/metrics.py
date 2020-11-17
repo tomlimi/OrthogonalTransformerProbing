@@ -108,7 +108,8 @@ class Spearman(Metric):
 
         if self.min_len <= sent_len <= self.max_len:
             rho, _ = stats.spearmanr(sent_gold, sent_predicted, axis=None)
-            self.per_sent_len[sent_len].append(rho)
+            if np.isfinite(rho):
+                self.per_sent_len[sent_len].append(rho)
 
     def result(self):
         return {sent_len: np.array(self.per_sent_len[sent_len]).mean() for sent_len in range(self.min_len, self.max_len +1)}

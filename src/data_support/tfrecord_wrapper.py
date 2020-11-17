@@ -205,7 +205,7 @@ class TFRecordWriter(TFRecordWrapper):
 
 class TFRecordReader(TFRecordWrapper):
 
-    def __init__(self, data_dir, model_name='bert-base-multilingual-uncased'):
+    def __init__(self, data_dir, model_name):
         super().__init__([], [], [])
         self.data_dir = data_dir
         self.model_name = model_name

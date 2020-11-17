@@ -204,14 +204,13 @@ class UASReporter(Reporter):
 					sent_predicted[sent_punctuation_mask, :] = np.inf
 					sent_predicted[:, sent_punctuation_mask] = np.inf
 					min_spanning_tree = sparse.csgraph.minimum_spanning_tree(sent_predicted).tocoo()
-					predicted = set(map(frozenset, zip(min_spanning_tree.row + 1, min_spanning_tree.col + 1)))
+					predicted = set(map(tuple, map(sorted, zip(min_spanning_tree.row + 1, min_spanning_tree.col + 1))))
 
 					sent_gold[sent_punctuation_mask, :] = np.inf
 					sent_gold[:, sent_punctuation_mask] = np.inf
 					min_spanning_tree_gold = sparse.csgraph.minimum_spanning_tree(sent_gold).tocoo()
-					gold = set(map(frozenset, zip(min_spanning_tree_gold.row + 1, min_spanning_tree_gold.col + 1)))
+					gold = set(map(tuple, map(sorted, zip(min_spanning_tree_gold.row + 1, min_spanning_tree_gold.col + 1))))
 					#gold = set(self.uu_rels[language][conll_idx])
-
 
 					self.uas[language].update_state(gold, predicted)
 

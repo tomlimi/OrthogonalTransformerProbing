@@ -52,9 +52,10 @@ class Network():
             """(D)SO implementation according to:
             https://papers.nips.cc/paper/7680-can-we-gain-more-from-orthogonality-regularizations-in-training-deep-networks.pdf"""
             #
-            w_cols = w.shape[0]
-            w_rows = w.shape[1]
-            reg = tf.norm(tf.transpose(w) @ w - tf.eye(w_cols)) # + tf.norm(w @ tf.transpose(w) - tf.eye(w_rows))
+            w_rows = w.shape[0]
+            w_cols = w.shape[1]
+
+            reg = tf.norm(tf.transpose(w) @ w - tf.eye(w_cols)) + tf.norm(w @ tf.transpose(w) - tf.eye(w_rows))
             # to avoid NaN in gradient update
             if reg == 0:
                 reg = 1e-6
@@ -349,6 +350,9 @@ class Network():
                 data = data.map(lambda *x: (lang, task, x), num_parallel_calls=tf.data.experimental.AUTOTUNE)
                 data = data.prefetch(tf.data.experimental.AUTOTUNE)
                 datasets_to_interleve.append(data)
+
+        if len(datasets_to_interleve) == 1:
+            return datasets_to_interleve[0]
 
         return tf.data.experimental.sample_from_datasets(datasets_to_interleve)
 
