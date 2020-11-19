@@ -10,6 +10,7 @@ sys.path.append(os.path.abspath('../src'))
 from network import Network
 import constants
 
+
 @pytest.fixture
 def network():
 	mock_args_dict = {'languages': ['en'],
@@ -41,8 +42,9 @@ def test_orthogonal_contraint(network):
 
 	ones_matrix = tf.ones([5,5])
 
-	tf.debugging.assert_none_equal(network.probe.ortho_reguralization(identity_big), 0.)
-	tf.debugging.assert_positive(network.probe.ortho_reguralization(identity_big))
+	tf.debugging.assert_none_equal(network.probe.ortho_reguralization(ones_matrix), 0.)
+	tf.debugging.assert_positive(network.probe.ortho_reguralization(ones_matrix))
+
 
 def test_loss_distance(network):
 
@@ -55,7 +57,7 @@ def test_loss_distance(network):
 	pred_B = tf.fill([3,3,3], 4.)
 
 	tf.debugging.assert_near(network.distance_probe._loss(target, pred_A, mask_ones, token_lengths), 0.)
-	tf.debugging.assert_near(network.distance_probe._loss(target, pred_B, mask_ones, token_lengths), 3.)
+	tf.debugging.assert_near(network.distance_probe._loss(target, pred_B, mask_ones, token_lengths), 1.)
 
 	tf.debugging.assert_near(network.distance_probe._loss(target, pred_A, mask_zeros, token_lengths), 0.)
 	tf.debugging.assert_near(network.distance_probe._loss(target, pred_B, mask_zeros, token_lengths), 0.)
@@ -72,7 +74,7 @@ def test_loss_depth(network):
 	pred_B = tf.fill([3,3], 4.)
 
 	tf.debugging.assert_near(network.depth_probe._loss(target, pred_A, mask_ones, token_lengths), 0.)
-	tf.debugging.assert_near(network.depth_probe._loss(target, pred_B, mask_ones, token_lengths), 3.)
+	tf.debugging.assert_near(network.depth_probe._loss(target, pred_B, mask_ones, token_lengths), 1.)
 
 	tf.debugging.assert_near(network.depth_probe._loss(target, pred_A, mask_zeros, token_lengths), 0.)
 	tf.debugging.assert_near(network.depth_probe._loss(target, pred_B, mask_zeros, token_lengths), 0.)

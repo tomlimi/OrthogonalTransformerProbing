@@ -127,7 +127,7 @@ class Network():
         def _loss(self, predicted_distances, gold_distances, mask, token_lens):
             sentence_loss = tf.reduce_sum(tf.abs(predicted_distances - gold_distances) * mask, axis=[1,2]) / \
                             tf.clip_by_value(tf.reduce_sum(mask, axis=[1,2]), 1., constants.MAX_TOKENS ** 2.)
-            return tf.reduce_sum(sentence_loss)
+            return tf.reduce_mean(sentence_loss)
 
         def train_factory(self, language, task):
             # separate train function is needed to avoid variable creation on non-first call
@@ -233,7 +233,7 @@ class Network():
         def _loss(self, predicted_depths, gold_depths, mask, token_lens):
             sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths) * mask, axis=1) / \
                             tf.clip_by_value(tf.reduce_sum(mask, axis=1), 1., constants.MAX_TOKENS)
-            return tf.reduce_sum(sentence_loss)
+            return tf.reduce_mean(sentence_loss)
 
         def train_factory(self, language, task):
             @tf.function(experimental_relax_shapes=True)
