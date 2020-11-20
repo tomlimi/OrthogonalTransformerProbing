@@ -30,12 +30,12 @@ class DependencyDistance(ConllWrapper):
             sentence_length = min(len(dependency_tree), constants.MAX_TOKENS)  # All observation fields must be of same length
             sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
             for i in range(sentence_length):
-                for j in range(i+1, sentence_length):
+                for j in range(i, sentence_length):
                     i_j_distance = self.distance_between_pairs(dependency_tree, i, j)
                     sentence_distances[i, j] = i_j_distance
                     sentence_distances[j, i] = i_j_distance
 
-            sentence_mask = tf.linalg.set_diag(sentence_mask, tf.repeat(0., constants.MAX_TOKENS))
+        #sentence_mask = tf.linalg.set_diag(sentence_mask, tf.repeat(0., constants.MAX_TOKENS))
 
             yield tf.constant(sentence_distances, dtype=tf.float32), sentence_mask
 
