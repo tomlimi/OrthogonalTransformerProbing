@@ -59,20 +59,6 @@ class ConllWrapper():
         if self.coreferences:
             self.coreferences = [v for i, v in enumerate(self.coreferences) if i not in indices_to_rm]
 
-    def resize_index(self, index_to_cut, new_size):
-        if self.tokens:
-            self.tokens[index_to_cut] = self.tokens[index_to_cut][:new_size]
-        if self.lemmas:
-            self.lemmas[index_to_cut] = self.lemmas[index_to_cut][:new_size]
-        if self.pos:
-            self.pos[index_to_cut] = self.pos[index_to_cut][:new_size]
-        if self.relations:
-            self.relations[index_to_cut] = self.relations[index_to_cut][:new_size]
-        if self.roots:
-            #TODO: think whether it is the best option
-            self.roots[index_to_cut] = min(self.roots[index_to_cut],new_size-1)
-        if self.coreferences:
-            self.coreferences[index_to_cut] = self.coreferences[index_to_cut][:new_size]
 
     def read_conllu(self, conll_file_path):
         sentence_relations = []

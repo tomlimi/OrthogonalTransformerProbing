@@ -227,7 +227,7 @@ class TFRecordReader(TFRecordWrapper):
                 for task in read_tasks:
                     if task not in self.tasks:
                         raise ValueError(f"Data for this task is not available in the directory: {task}\n"
-                                         f" supported languages: {self.tasks}")
+                                         f" supported tasks: {self.tasks}")
                     tfr_fn = os.path.join(self.data_dir, self.map_tfrecord[mode][self.model_name][lang][task])
                     data_set[lang][task] = tf.data.TFRecordDataset(tfr_fn,
                                                                    #compression_type='GZIP',
