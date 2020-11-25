@@ -17,6 +17,7 @@ DER_SIZE = 1621
 DER_TRAIN_SIZE = int(0.8 * DER_SIZE)
 DER_DEV_SIZE = int(0.1 * DER_SIZE)
 
+central_storage_strategy = tf.distribute.experimental.CentralStorageStrategy()
 
 class Network():
 
@@ -226,7 +227,7 @@ class Network():
             else:
                 embeddings = embeddings @ self.DepthProbe[task]
 
-            squared_norms = tf.norm(embeddings, ord='euclidean', axis=2) ** 2
+            squared_norms = tf.norm(embeddings, ord='euclidean', axis=2) ** 2.
             return squared_norms
 
         @tf.function

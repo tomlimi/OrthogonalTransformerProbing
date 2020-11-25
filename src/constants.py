@@ -60,4 +60,4 @@ BERT_MODEL_DIR = "/net/projects/bert/models/"
 
 #data pipeline options
 BUFFER_SIZE = 50 * 1000 * 1000
-SHUFFLE_SIZE = 1024
+SHUFFLE_SIZE = 768
