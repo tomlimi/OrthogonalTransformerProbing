@@ -26,6 +26,7 @@ class ConllWrapper():
         self.coreferences = []
 
         self.read_conllu(conll_file)
+        self.training_examples()  # this call is needed here, because it removes too long and mismatched sentences
 
     @property
     def unlabeled_relations(self):

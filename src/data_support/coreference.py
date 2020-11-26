@@ -17,8 +17,6 @@ COREF_POS_LIST = ['NN', 'NNS', 'NNP', 'NNPS', 'PRP', 'PRP$', 'WP', 'WP$', 'WRB']
 
 class CoreferenceDistance(ConllWrapper):
 
-	max_wordpieces = constants.MAX_WORDPIECES
-
 	def __init__(self, conll_file, bert_tokenizer, lang='en'):
 		super().__init__(conll_file, bert_tokenizer)
 

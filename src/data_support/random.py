@@ -7,7 +7,6 @@ from data_support.dependency import DependencyDistance, DependencyDepth
 
 class RandomDistance(DependencyDistance):
 
-	max_wordpieces = constants.MAX_WORDPIECES
 
 	def __init__(self, conll_file, bert_tokenizer, lang='en'):
 		super().__init__(conll_file, bert_tokenizer)
@@ -43,8 +42,6 @@ class RandomDistance(DependencyDistance):
 
 
 class RandomDepth(DependencyDepth):
-
-	max_wordpieces = constants.MAX_WORDPIECES
 
 	def __init__(self, conll_file, bert_tokenizer, lang='en'):
 		super().__init__(conll_file, bert_tokenizer)

@@ -9,8 +9,6 @@ import constants
 
 class LexicalDistance(ConllWrapper):
 
-    max_wordpieces = constants.MAX_WORDPIECES
-
     def __init__(self, conll_file, bert_tokenizer, lang='en'):
         super().__init__(conll_file, bert_tokenizer)
         if lang not in constants.lang2iso:
@@ -90,8 +88,6 @@ class LexicalDistance(ConllWrapper):
 
 
 class LexicalDepth(ConllWrapper):
-
-    max_wordpieces = constants.MAX_WORDPIECES
 
     def __init__(self, conll_file, bert_tokenizer, lang='en'):
         super().__init__(conll_file, bert_tokenizer)
