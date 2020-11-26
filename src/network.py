@@ -160,7 +160,8 @@ class Network():
                 self.probe._optimizer.apply_gradients(zip(gradients, variables))
                 tf.summary.experimental.set_step(self.probe._optimizer.iterations)
 
-                with self.probe._writer.as_default(), tf.summary.record_if(self.probe._optimizer.iterations % 10 == 0):
+                with self.probe._writer.as_default(), tf.summary.record_if(self.probe._optimizer.iterations % 20 == 0
+                                                                           or self.probe._optimizer.iterations == 1):
                     tf.summary.scalar("train/batch_loss_{}".format(language), loss)
                     tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
                     if self.probe._orthogonal_reg:
@@ -264,7 +265,8 @@ class Network():
                 self.probe._optimizer.apply_gradients(zip(gradients, variables))
                 tf.summary.experimental.set_step(self.probe._optimizer.iterations)
 
-                with self.probe._writer.as_default(), tf.summary.record_if(self.probe._optimizer.iterations % 10 == 0):
+                with self.probe._writer.as_default(), tf.summary.record_if(self.probe._optimizer.iterations % 20 == 0
+                                                                           or self.probe._optimizer.iterations == 1):
                     tf.summary.scalar("train/batch_loss_{}".format(language), loss)
                     tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
                     if self.probe._orthogonal_reg:
