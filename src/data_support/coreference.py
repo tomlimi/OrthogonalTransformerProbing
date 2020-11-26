@@ -127,12 +127,13 @@ class CoreferenceDistance(ConllWrapper):
 		  mask: A tensor of shape (number of examples, sentence_length, sentence_length) specifying which elements of
 		  the target should be used during training.
 		"""
-		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
-		                   tf.float32)
-		seq_mask = tf.expand_dims(seq_mask, 1)
-		seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
+		seq_mask = tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS)
 
 		for coreferents_list, sentence_pos, sentence_seq_mask in zip(self.coreferences, self.pos, tf.unstack(seq_mask)):
+			sentence_seq_mask = tf.cast(sentence_seq_mask, tf.float32)
+			sentence_seq_mask = tf.expand_dims(sentence_seq_mask, 1)
+			sentence_seq_mask = sentence_seq_mask * tf.transpose(sentence_seq_mask)
+
 			sentence_length = min(len(coreferents_list),
 			                      constants.MAX_TOKENS)  # All observation fields must be of same length
 			sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)

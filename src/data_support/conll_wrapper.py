@@ -110,7 +110,7 @@ class ConllWrapper():
         :return:
             2-D tensor  [num valid sentences, max num wordpieces] bert wordpiece ids,
             2-D tensor [num valid sentences, max num wordpieces] wordpiece to word segment mappings
-            1-D tensor [num valide sentenes] number of words in each sentence
+            1-D tensor [num valid sentences] number of words in each sentence
         '''
         
         number_examples = len(self.tokens)

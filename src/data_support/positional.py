@@ -18,14 +18,14 @@ class PositionalDistance(ConllWrapper):
 		  mask: A tensor of shape (number of examples, sentence_length, sentence_length) specifying which elements of
 		  the target should be used during training.
 		"""
-		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
-		                   tf.float32)
-		seq_mask = tf.expand_dims(seq_mask, 1)
-		seq_mask = seq_mask * tf.transpose(seq_mask, perm=[0, 2, 1])
+		seq_mask = tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS)
 
 		for sent_tokens, sentence_mask in zip(self.tokens, tf.unstack(seq_mask)):
-			sentence_length = min(len(sent_tokens),
-			                      constants.MAX_TOKENS)  # All observation fields must be of same length
+			sentence_mask = tf.cast(sentence_mask, tf.float32)
+			sentence_mask = tf.expand_dims(sentence_mask, 1)
+			sentence_mask = sentence_mask * tf.transpose(sentence_mask)
+
+			sentence_length = min(len(sent_tokens), constants.MAX_TOKENS)  # All observation fields must be of same length
 			sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
 			for i in range(sentence_length):
 				for j in range(i, sentence_length):
@@ -51,12 +51,11 @@ class PositionalDepth(ConllWrapper):
 		  mask: A tensor of shape (number of examples, sentence_length) specifying which elements of the target
 		  should be used during training.
 		"""
-		seq_mask = tf.cast(tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS),
-		                   tf.float32)
+		seq_mask = tf.sequence_mask([len(sent_tokens) for sent_tokens in self.tokens], constants.MAX_TOKENS)
 
 		for sent_tokens, sentence_mask in zip(self.tokens, tf.unstack(seq_mask)):
-			sentence_length = min(len(sent_tokens),
-			                      constants.MAX_TOKENS)  # All observation fields must be of same length
+			sentence_mask = tf.cast(sentence_mask, tf.float32)
+			sentence_length = min(len(sent_tokens), constants.MAX_TOKENS)  # All observation fields must be of same length
 			sentence_depths = np.zeros(constants.MAX_TOKENS, dtype=np.float32)
 			for i in range(sentence_length):
 				sentence_depths[i] = float(i)

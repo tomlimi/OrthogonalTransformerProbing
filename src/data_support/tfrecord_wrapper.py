@@ -16,6 +16,8 @@ from data_support.random import RandomDistance, RandomDepth
 from data_support.positional import PositionalDistance, PositionalDepth
 
 
+central_storage_strategy = tf.distribute.experimental.CentralStorageStrategy()
+
 conllu_wrappers = {
 	"dep_distance": DependencyDistance,
 	"dep_depth": DependencyDepth,
