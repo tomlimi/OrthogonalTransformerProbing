@@ -214,7 +214,7 @@ class UASReporter(Reporter):
 
 					for i in range(sent_len):
 						for j in range(sent_len):
-							if i in sent_punctuation_mask or j in sent_punctuation_mask:
+							if sent_punctuation_mask[i] or sent_punctuation_mask[j]:
 								sent_predicted[i, j] = np.inf
 								sent_gold[i, j] = np.inf
 							elif self.depths is None:
