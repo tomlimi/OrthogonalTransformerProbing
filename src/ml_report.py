@@ -7,7 +7,7 @@ from data_support.tfrecord_wrapper import TFRecordReader
 from network import Network
 
 from reporting.reporter import CorrelationReporter, GatedCorrelationReporter
-from reporting.reporter import UASReporter
+from reporting.reporter import UASReporter, predict_dep_depths
 
 from transformers import BertTokenizer
 # from reporting.reporter import DependencyDistanceReporter, DependencyDepthReporter
@@ -93,6 +93,11 @@ if __name__ == "__main__":
 			lang_conll.training_examples()
 			conll_dict[lang] = lang_conll
 
-		uas_reporter = UASReporter(args, network, tf_reader.test, 'test', conll_dict)
+		if 'dep_depth' in args.tasks:
+			depths = predict_dep_depths(args, network, tf_reader.test, 'test')
+		else:
+			depths = None
+
+		uas_reporter = UASReporter(args, network, tf_reader.test, 'test', conll_dict, depths)
 		uas_reporter.predict(args)
 		uas_reporter.write(args)

@@ -29,16 +29,12 @@ class ConllWrapper():
         self.training_examples()  # this call is needed here, because it removes too long and mismatched sentences
 
     @property
-    def unlabeled_relations(self):
-        return [{dep: parent for dep, parent in sent_relation} for sent_relation in self.relations]
-
-    @property
     def punctuation_mask(self):
         return [[pos_tag == "PUNCT" for pos_tag in sentence_pos] for sentence_pos in self.pos]
 
     @property
-    def unlabeled_unordered_relations(self):
-        return [{frozenset((dep, parent)) for dep, parent in sent_relation
+    def filtered_relations(self):
+        return [{(dep, parent) for dep, parent in sent_relation
                  if (not sent_punctuation_mask[dep - 1]) and parent}
                 for sent_relation, sent_punctuation_mask in zip(self.relations, self.punctuation_mask)]
     
