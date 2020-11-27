@@ -6,12 +6,10 @@ from data_support.conll_wrapper import ConllWrapper
 from data_support.tfrecord_wrapper import TFRecordReader
 from network import Network
 
-from reporting.reporter import CorrelationReporter, GatedCorrelationReporter
-from reporting.reporter import UASReporter, predict_dep_depths
+from reporting.reporter import CorrelationReporter
+from reporting.reporter import UASReporter, DependncyDepthReporter
 
 from transformers import BertTokenizer
-# from reporting.reporter import DependencyDistanceReporter, DependencyDepthReporter
-# from reporting.reporter import LexicalDistanceReporter,  LexicalDepthReporter
 
 import constants
 
@@ -78,11 +76,8 @@ if __name__ == "__main__":
 	network = Network(args)
 	network.load(args)
 
-	if args.probe_threshold:
-		reporter = GatedCorrelationReporter(args, network, tf_reader.test, 'test')
-	else:
-		reporter = CorrelationReporter(args, network, tf_reader.test, 'test')
-	reporter.predict(args)
+	reporter = CorrelationReporter(args, network, tf_reader.test, 'test')
+	reporter.compute(args)
 	reporter.write(args)
 
 	if 'dep_distance' in args.tasks:
@@ -94,10 +89,11 @@ if __name__ == "__main__":
 			conll_dict[lang] = lang_conll
 
 		if 'dep_depth' in args.tasks:
-			depths = predict_dep_depths(args, network, tf_reader.test, 'test')
+			dep_reportet = DependncyDepthReporter(args, network, tf_reader.test, 'test')
+			depths = dep_reportet.compute(args)
 		else:
 			depths = None
 
 		uas_reporter = UASReporter(args, network, tf_reader.test, 'test', conll_dict, depths)
-		uas_reporter.predict(args)
+		uas_reporter.compute(args)
 		uas_reporter.write(args)
