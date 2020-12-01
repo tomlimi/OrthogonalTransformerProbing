@@ -20,7 +20,7 @@ class Reporter():
 		self._probe_threshold = args.probe_threshold
 		self._drop_parts = args.drop_parts
 
-	def get_embedding_gate(self, task, part_to_drop):
+	def get_embedding_gate(self, task, part_to_drop=0):
 
 		if 'distance' in task:
 			diagonal_probe = self.network.distance_probe.DistanceProbe[task].numpy()
@@ -110,73 +110,6 @@ class CorrelationReporter(Reporter):
 					self.spearman_d[language][task](gold_values, pred_values, mask)
 
 
-class GatedCorrelationReporter(Reporter):
-
-	def __init__(self, args, network, dataset, dataset_name):
-		super().__init__(args, network, dataset, dataset_name)
-
-		self._probe_threshold = args.probe_threshold
-		self._drop_parts = args.drop_parts
-
-		self._languages = args.languages
-		self._tasks = args.tasks
-		self.spearman_d = defaultdict(dict)
-
-	def write(self, args):
-		for language in self._languages:
-			for task in self._tasks:
-				prefix = '{}.{}.{}.gated.'.format(self.dataset_name, language, task)
-				if self._drop_parts:
-					prefix += 'dp{}.'.format(self._drop_parts)
-
-				with open(os.path.join(args.out_dir, prefix + 'spearman'), 'w') as sperarman_f:
-					for sent_l, val in self.spearman_d[language][task].result().items():
-						sperarman_f.write(f'{sent_l}\t{val}\n')
-
-				with open(os.path.join(args.out_dir, prefix + 'spearman_mean'), 'w') as sperarman_mean_f:
-					result = str(np.nanmean(np.fromiter(self.spearman_d[language][task].result().values(), dtype=float)))
-					sperarman_mean_f.write(result + '\n')
-
-	def compute(self, args):
-		test = {lang: {task: Network.data_pipeline(self.dataset, [lang], [task], args, mode=self.dataset_name)
-		               for task in self._tasks}
-		        for lang in self._languages}
-
-		validation_steps = self._drop_parts or 1
-
-		for language in self._languages:
-			for task in self._tasks:
-				self.spearman_d[language][task] = Spearman()
-
-				for part_to_drop in range(validation_steps):
-					progressbar = tqdm(enumerate(test[language][task]), desc="Predicting, {}, {}".format(language, task))
-					for batch_idx, (_, _, batch) in progressbar:
-						_, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
-
-						embedding_gate = self.get_embedding_gate(task, part_to_drop)
-						# batch_num_tokens = list(batch_num_tokens.numpy())
-						if 'distance' in task:
-							pred_values = self.network.distance_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
-							                                                           language, task, embedding_gate)
-							pred_values = [sent_predicted.numpy()[:sent_len, :sent_len] for sent_predicted, sent_len
-							               in zip(tf.unstack(pred_values), batch_num_tokens)]
-							gold_values = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
-							               in zip(tf.unstack(batch_target), batch_num_tokens)]
-							mask = [sent_mask.numpy().astype(bool)[:sent_len, :sent_len] for sent_mask, sent_len
-							        in zip(tf.unstack(batch_mask), batch_num_tokens)]
-						elif 'depth' in task:
-							pred_values = self.network.depth_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
-							                                                        language, task, embedding_gate)
-							pred_values = [sent_predicted.numpy()[:sent_len] for sent_predicted, sent_len
-							               in zip(tf.unstack(pred_values), batch_num_tokens)]
-							gold_values = [sent_gold.numpy()[:sent_len] for sent_gold, sent_len
-							               in zip(tf.unstack(batch_target), batch_num_tokens)]
-							mask = [sent_mask.numpy().astype(bool)[:sent_len] for sent_mask, sent_len
-							        in zip(tf.unstack(batch_mask), batch_num_tokens)]
-
-						self.spearman_d[language][task](gold_values, pred_values, mask)
-
-
 class UASReporter(Reporter):
 	def __init__(self, args, network, dataset, dataset_name, conll_dict, depths=None):
 		super().__init__(args, network, dataset, dataset_name)
@@ -243,7 +176,7 @@ class UASReporter(Reporter):
 					self.uas[language].update_state(gold, predicted)
 
 
-class DependncyDepthReporter(Reporter):
+class DependencyDepthReporter(Reporter):
 
 	def init(self, args, network, dataset, dataset_name):
 		super().__init__(args, network, dataset, dataset_name)
@@ -256,3 +189,39 @@ class DependncyDepthReporter(Reporter):
 					results[language][conll_idx] = {'predicted': sent_predicted, 'gold': sent_gold}
 
 		return results
+
+
+class SelectedDimensionalityReporter(Reporter):
+
+	def __init__(self, args, network, dataset, dataset_name):
+		super().__init__(args, network, dataset, dataset_name)
+		self._languages = args.languages
+		self._tasks = args.tasks
+
+		self.dimension_matrices = dict()
+
+	def write(self, args):
+		for language in self._languages:
+			for task_idx, task in enumerate(self._tasks):
+				prefix = '{}.{}.'.format(language, task)
+
+				with open(os.path.join(args.out_dir, prefix + 'selected_dims'), 'w') as selected_dims_f:
+					result = str(self.dimension_matrices[language][task_idx, task_idx])
+					selected_dims_f.write(result + '\n')
+
+			prefix = '{}.'.format(language)
+			with open(os.path.join(args.out_dir, prefix + 'inter_dims'), 'w') as inter_dims_f:
+				inter_dims_f.write(',\t'.join([' '] + self._tasks) + '\n')
+				for task, matrix_row in zip(self._tasks, self.dimension_matrices[language]):
+					inter_dims_f.write(',\t'.join([task] + list(matrix_row.astype(str))) + '\n')
+
+	def compute(self, args):
+		for language in self._languages:
+			self.dimension_matrices[language] = np.zeros((len(self._tasks), len(self._tasks)), dtype=np.int)
+			selected_dims = dict()
+			for task_idx, task in enumerate(self._tasks):
+				selected_dims[task_idx] = self.get_embedding_gate(task)
+				for task_jdx in range(task_idx+1):
+					dims_n = tf.math.reduce_sum(selected_dims[task_idx] * selected_dims[task_jdx]).numpy().astype(int)
+					self.dimension_matrices[language][task_idx, task_jdx] = dims_n
+					self.dimension_matrices[language][task_jdx, task_idx] = dims_n

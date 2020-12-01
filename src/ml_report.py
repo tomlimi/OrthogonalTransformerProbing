@@ -7,7 +7,8 @@ from data_support.tfrecord_wrapper import TFRecordReader
 from network import Network
 
 from reporting.reporter import CorrelationReporter
-from reporting.reporter import UASReporter, DependncyDepthReporter
+from reporting.reporter import SelectedDimensionalityReporter
+from reporting.reporter import UASReporter, DependencyDepthReporter
 
 from transformers import BertTokenizer
 
@@ -76,6 +77,12 @@ if __name__ == "__main__":
 	network = Network(args)
 	network.load(args)
 
+	if args.probe_threshold and args.drop_parts is None:
+		# dataset is not required to report dimensionality
+		dim_reporter = SelectedDimensionalityReporter(args, network, None, None)
+		dim_reporter.compute(args)
+		dim_reporter.write(args)
+
 	reporter = CorrelationReporter(args, network, tf_reader.test, 'test')
 	reporter.compute(args)
 	reporter.write(args)
@@ -89,7 +96,7 @@ if __name__ == "__main__":
 			conll_dict[lang] = lang_conll
 
 		if 'dep_depth' in args.tasks:
-			dep_reportet = DependncyDepthReporter(args, network, tf_reader.test, 'test')
+			dep_reportet = DependencyDepthReporter(args, network, tf_reader.test, 'test')
 			depths = dep_reportet.compute(args)
 		else:
 			depths = None
