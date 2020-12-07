@@ -110,7 +110,7 @@ class Network():
             embeddings = embeddings[:,:max_token_len,:]
             if self.probe.ml_probe:
                 embeddings = embeddings @ self.probe.LanguageMaps[language]
-            if self.probe._orthogonal_reg:
+            if self.probe._orthogonal_reg and self.probe.ml_probe:
                 embeddings = embeddings * self.DistanceProbe[task]
                 if embeddings_gate is not None:
                     embeddings = embeddings * embeddings_gate
@@ -221,7 +221,7 @@ class Network():
             embeddings = embeddings[:, :max_token_len, :]
             if self.probe.ml_probe:
                 embeddings = embeddings @ self.probe.LanguageMaps[language]
-            if self.probe._orthogonal_reg:
+            if self.probe._orthogonal_reg and self.probe.ml_probe:
                 embeddings = embeddings * self.DepthProbe[task]
                 if embeddings_gate is not None:
                     embeddings = embeddings * embeddings_gate
