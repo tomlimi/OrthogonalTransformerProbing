@@ -164,7 +164,7 @@ class Network():
                                                                            or self.probe._optimizer.iterations == 1):
                     tf.summary.scalar("train/batch_loss_{}".format(language), loss)
                     tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
-                    if self.probe._orthogonal_reg:
+                    if self.probe._orthogonal_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
                     if self.probe.ml_probe:
                         tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
@@ -269,7 +269,7 @@ class Network():
                                                                            or self.probe._optimizer.iterations == 1):
                     tf.summary.scalar("train/batch_loss_{}".format(language), loss)
                     tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
-                    if self.probe._orthogonal_reg:
+                    if self.probe._orthogonal_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
                     if self.probe.ml_probe:
                         tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
