@@ -41,7 +41,7 @@ class Network():
             self._lr = args.learning_rate
             self._clip_norm = args.clip_norm
             self._orthogonal_reg = args.ortho
-            self._l2_reg = args.l2
+            self._l1_reg = args.l1
             self._optimizer = tf.optimizers.Adam(lr=self._lr)
 
             self._writer = tf.summary.create_file_writer(args.out_dir, flush_millis=10 * 1000, name='summary_writer')
@@ -145,9 +145,9 @@ class Network():
                     if self.probe._orthogonal_reg and self.probe.ml_probe:
                         ortho_penalty = self.probe.ortho_reguralization(self.probe.LanguageMaps[language])
                         loss += self.probe._orthogonal_reg * ortho_penalty
-                    if self.probe._l2_reg:
-                        loss += self.probe._l2_reg * tf.norm(self.probe.LanguageMaps[language])
-                        loss += self.probe._l2_reg * tf.norm(self.DistanceProbe[task])
+                    if self.probe._l1_reg and self.probe.ml_probe:
+                        probe_l1_penalty = tf.norm(self.DistanceProbe[task], ord=1)
+                        loss += self.probe._l1_reg * probe_l1_penalty
 
                 if self.probe.ml_probe:
                     variables = [self.DistanceProbe[task], self.probe.LanguageMaps[language]]
@@ -166,6 +166,8 @@ class Network():
                     tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
                     if self.probe._orthogonal_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
+                    if self.probe._l1_reg and self.probe.ml_probe:
+                        tf.summary.scalar("train/probe_l1_penalty", probe_l1_penalty)
                     if self.probe.ml_probe:
                         tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
 
@@ -250,9 +252,9 @@ class Network():
                     if self.probe._orthogonal_reg and self.probe.ml_probe:
                         ortho_penalty = self.probe.ortho_reguralization(self.probe.LanguageMaps[language])
                         loss += self.probe._orthogonal_reg * ortho_penalty
-                    if self.probe._l2_reg:
-                        loss += self.probe._l2_reg * tf.norm(self.probe.LanguageMaps[language])
-                        loss += self.probe._l2_reg * tf.norm(self.DepthProbe[task])
+                    if self.probe._l1_reg and self.probe.ml_probe:
+                        probe_l1_penalty = tf.norm(self.DepthProbe[task], ord=1)
+                        loss += self.probe._l1_reg * probe_l1_penalty
 
                 if self.probe.ml_probe:
                     variables = [self.DepthProbe[task], self.probe.LanguageMaps[language]]
@@ -271,8 +273,11 @@ class Network():
                     tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
                     if self.probe._orthogonal_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
+                    if self.probe._l1_reg and self.probe.ml_probe:
+                        tf.summary.scalar("train/probe_l1_penalty", probe_l1_penalty)
                     if self.probe.ml_probe:
                         tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
+
 
                 return loss
             return train_on_batch
