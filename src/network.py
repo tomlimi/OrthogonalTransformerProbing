@@ -25,6 +25,8 @@ class Network():
     ES_PATIENCE = 4
     ES_DELTA = 1e-4
 
+    INITIAL_EPOCHS = 3
+
     class Probe():
         def __init__(self, args):
             self.probe_rank = constants.MODEL_DIMS[args.bert_path]
@@ -134,7 +136,7 @@ class Network():
             # separate train function is needed to avoid variable creation on non-first call
             # see: https://github.com/tensorflow/tensorflow/issues/27120
             @tf.function(experimental_relax_shapes=True)
-            def train_on_batch(target, mask, token_len, embeddings):
+            def train_on_batch(target, mask, token_len, embeddings, l1_lambda=0.0):
 
                 with tf.GradientTape() as tape:
                     max_token_len = tf.reduce_max(token_len)
@@ -147,7 +149,7 @@ class Network():
                         loss += self.probe._orthogonal_reg * ortho_penalty
                     if self.probe._l1_reg and self.probe.ml_probe:
                         probe_l1_penalty = tf.norm(self.DistanceProbe[task], ord=1)
-                        loss += self.probe._l1_reg * probe_l1_penalty
+                        loss += l1_lambda * probe_l1_penalty
 
                 if self.probe.ml_probe:
                     variables = [self.DistanceProbe[task], self.probe.LanguageMaps[language]]
@@ -168,6 +170,7 @@ class Network():
                         tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
                     if self.probe._l1_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/probe_l1_penalty", probe_l1_penalty)
+                        tf.summary.scalar("train/l1_lambda", l1_lambda)
                     if self.probe.ml_probe:
                         tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
 
@@ -241,7 +244,7 @@ class Network():
 
         def train_factory(self, language, task):
             @tf.function(experimental_relax_shapes=True)
-            def train_on_batch(target, mask, token_len, embeddings):
+            def train_on_batch(target, mask, token_len, embeddings, l1_lambda=0.0):
 
                 with tf.GradientTape() as tape:
                     max_token_len = tf.reduce_max(token_len)
@@ -254,7 +257,7 @@ class Network():
                         loss += self.probe._orthogonal_reg * ortho_penalty
                     if self.probe._l1_reg and self.probe.ml_probe:
                         probe_l1_penalty = tf.norm(self.DepthProbe[task], ord=1)
-                        loss += self.probe._l1_reg * probe_l1_penalty
+                        loss += l1_lambda * probe_l1_penalty
 
                 if self.probe.ml_probe:
                     variables = [self.DepthProbe[task], self.probe.LanguageMaps[language]]
@@ -275,9 +278,9 @@ class Network():
                         tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
                     if self.probe._l1_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/probe_l1_penalty", probe_l1_penalty)
+                        tf.summary.scalar("train/l1_lambda", l1_lambda)
                     if self.probe.ml_probe:
                         tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
-
 
                 return loss
             return train_on_batch
@@ -372,6 +375,8 @@ class Network():
                       for task in self.tasks}
                for lang in self.languages}
 
+        l1_lambda = 0.0
+
         for epoch_idx in range(args.epochs):
 
             progressbar = tqdm(enumerate(train))
@@ -384,10 +389,10 @@ class Network():
 
                 if 'depth' in task:
                     batch_loss = self.depth_probe._train_fns[lang][task](
-                        batch_target, batch_mask, batch_num_tokens, batch_embeddings)
+                        batch_target, batch_mask, batch_num_tokens, batch_embeddings, l1_lambda)
                 elif 'distance' in task:
                     batch_loss = self.distance_probe._train_fns[lang][task](
-                        batch_target, batch_mask, batch_num_tokens, batch_embeddings)
+                        batch_target, batch_mask, batch_num_tokens, batch_embeddings, l1_lambda)
 
                 progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
 
@@ -404,6 +409,14 @@ class Network():
             if curr_patience > self.ES_PATIENCE:
                 self.load(args)
                 break
+
+            if epoch_idx == self.INITIAL_EPOCHS - 1 and self.probe._l1_reg:
+                # After initial epochs l1 reguralization can be turned on
+                l1_lambda = self.probe._l1_reg
+                # Loss equation changes, so we need to reset optimal loss
+                self.optimal_loss = np.inf
+
+
             with self.probe._writer.as_default():
                 tf.summary.scalar("train/learning_rate", self.probe._optimizer.learning_rate)
 
