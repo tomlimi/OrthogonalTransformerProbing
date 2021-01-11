@@ -25,6 +25,7 @@ class Network():
     ES_PATIENCE = 4
     ES_DELTA = 1e-4
 
+    PENALTY_THRESHOLD = 0.2
     INITIAL_EPOCHS = 3
 
     class Probe():
@@ -410,12 +411,16 @@ class Network():
                 self.load(args)
                 break
 
-            if epoch_idx == self.INITIAL_EPOCHS - 1 and self.probe._l1_reg:
-                # After initial epochs l1 reguralization can be turned on
-                l1_lambda = self.probe._l1_reg
-                # Loss equation changes, so we need to reset optimal loss
-                self.optimal_loss = np.inf
+            if self.probe._l1_reg and not l1_lambda:
+                sum_ortho_penalty = 0.
+                for orthogonal_matrix in self.probe.LanguageMaps.values():
+                    sum_ortho_penalty += self.probe.ortho_reguralization(orthogonal_matrix)
 
+                if sum_ortho_penalty <= self.PENALTY_THRESHOLD:
+                    # Turn on l1 regularization when orthogonality penalty is already small
+                    l1_lambda = self.probe._l1_reg
+                    # Loss equation changes, so we need to reset optimal loss
+                    self.optimal_loss = np.inf
 
             with self.probe._writer.as_default():
                 tf.summary.scalar("train/learning_rate", self.probe._optimizer.learning_rate)
