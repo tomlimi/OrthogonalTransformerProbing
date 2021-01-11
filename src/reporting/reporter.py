@@ -76,11 +76,11 @@ class Reporter():
 
 class CorrelationReporter(Reporter):
 
-	def __init__(self, args, network, dataset, dataset_name):
+	def __init__(self, args, network, tasks, dataset, dataset_name):
 		super().__init__(args, network, dataset, dataset_name)
 
 		self._languages = args.languages
-		self._tasks = args.tasks
+		self._tasks = tasks
 		self.spearman_d = defaultdict(dict)
 
 	def write(self, args):
@@ -193,10 +193,10 @@ class DependencyDepthReporter(Reporter):
 
 class SelectedDimensionalityReporter(Reporter):
 
-	def __init__(self, args, network, dataset, dataset_name):
+	def __init__(self, args, network, tasks, dataset, dataset_name):
 		super().__init__(args, network, dataset, dataset_name)
 		self._languages = args.languages
-		self._tasks = args.tasks
+		self._tasks = tasks
 
 		self.dimension_matrices = dict()
 

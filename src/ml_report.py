@@ -34,7 +34,6 @@ if __name__ == "__main__":
 	                         "Averaged results are reported (similart to Cross Validation).")
 
 	# Probe arguments
-	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
 	parser.add_argument("--no-ml-probe", action="store_true", help="Resign from ml probe (store false)")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
 	# Specify Bert Model
@@ -79,13 +78,21 @@ if __name__ == "__main__":
 
 	if args.probe_threshold and args.drop_parts is None and args.ml_probe:
 		# dataset is not required to report dimensionality
-		dim_reporter = SelectedDimensionalityReporter(args, network, None, None)
+		dim_reporter = SelectedDimensionalityReporter(args, network, args.tasks, None, None)
 		dim_reporter.compute(args)
 		dim_reporter.write(args)
 
-	reporter = CorrelationReporter(args, network, tf_reader.test, 'test')
-	reporter.compute(args)
-	reporter.write(args)
+	tasks = set(args.tasks).difference({"rnd_depth", "rnd_distance"})
+	if tasks:
+		reporter = CorrelationReporter(args, network, tasks, tf_reader.test, 'test')
+		reporter.compute(args)
+		reporter.write(args)
+
+	rnd_tasks = set(args.tasks).intersection({"rnd_depth", "rnd_distance"})
+	if rnd_tasks:
+		rnd_reporter = CorrelationReporter(args, network, rnd_tasks, tf_reader.train, 'train')
+		rnd_reporter.compute(args)
+		rnd_reporter.write(args)
 
 	if 'dep_distance' in args.tasks:
 		tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=do_lower_case)
