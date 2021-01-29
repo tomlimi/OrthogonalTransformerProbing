@@ -24,6 +24,7 @@ class ConllWrapper():
         self.relations = []
         self.roots = []
         self.coreferences = []
+        self.shuffled = []
 
         self.read_conllu(conll_file)
         self.training_examples()  # this call is needed here, because it removes too long and mismatched sentences
@@ -55,6 +56,8 @@ class ConllWrapper():
             self.roots = [v for i, v in enumerate(self.roots) if i not in indices_to_rm]
         if self.coreferences:
             self.coreferences = [v for i, v in enumerate(self.coreferences) if i not in indices_to_rm]
+        if self.shuffled:
+            self.shuffled = [v for i, v in enumerate(self.shuffled) if i not in indices_to_rm]
 
 
     def read_conllu(self, conll_file_path):
@@ -100,10 +103,11 @@ class ConllWrapper():
         input_ids = token_ids + [0] * (constants.MAX_WORDPIECES - len(wordpieces))
         return input_ids
 
-    def training_examples(self):
+    def training_examples(self, shuffle=False):
         '''
         Joins wordpices of tokens, so that they correspond to the tokens in conllu file.
-        :param wordpieces_all: lists of BPE pieces for each sentence
+        :param shuffle: whether to shuffle tokens in each sentence
+        
         :return:
             2-D tensor  [num valid sentences, max num wordpieces] bert wordpiece ids,
             2-D tensor [num valid sentences, max num wordpieces] wordpiece to word segment mappings
@@ -113,7 +117,15 @@ class ConllWrapper():
         number_examples = len(self.tokens)
         wordpieces = []
         indices_to_rm = []
+        
         for idx, sent_tokens in enumerate(self.tokens[:]):
+            if shuffle:
+                sent_shuf = np.arange(len(sent_tokens))
+                self.random_state.shuffle(sent_shuf)
+                self.shuffled.append(sent_shuf)
+                
+                sent_tokens = list(np.array(sent_tokens)[sent_shuf])
+                
             sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)), add_special_tokens=False) + ["[SEP]"]
 
             if len(sent_tokens) >= constants.MAX_TOKENS:
@@ -137,7 +149,7 @@ class ConllWrapper():
         max_segment = []
         bert_ids = []
         sent_idx = 0
-        for sent_wordpieces, sent_tokens in zip(wordpieces, self.tokens):
+        for sent_wordpieces, sent_tokens in zip(wordpieces, self.tokens[:]):
             if sent_idx in indices_to_rm:
                 sent_idx += 1
                 continue
@@ -145,6 +157,9 @@ class ConllWrapper():
             sent_segments = np.zeros((constants.MAX_WORDPIECES,), dtype=np.int64) - 1
             segment_id = 0
             wordpiece_pointer = 1
+            if shuffle:
+                sent_shuf = self.shuffled[sent_idx]
+                sent_tokens = list(np.array(sent_tokens)[sent_shuf])
             for token in sent_tokens:
                 worpieces_per_token = len(self.tokenizer.tokenize(token, add_special_tokens=False))
                 sent_segments[wordpiece_pointer:wordpiece_pointer+worpieces_per_token] = segment_id

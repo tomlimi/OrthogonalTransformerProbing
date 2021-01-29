@@ -14,6 +14,7 @@ from data_support.lexical import LexicalDistance, LexicalDepth
 from data_support.coreference import CoreferenceDistance
 from data_support.random import RandomDistance, RandomDepth
 from data_support.positional import PositionalDistance, PositionalDepth
+from data_support.shuffled import ShuffledDistance, ShuffledDepth
 
 
 central_storage_strategy = tf.distribute.experimental.CentralStorageStrategy()
@@ -27,7 +28,9 @@ conllu_wrappers = {
 	"rnd_depth": RandomDepth,
 	"rnd_distance": RandomDistance,
 	"pos_depth": PositionalDepth,
-	"pos_distance": PositionalDistance
+	"pos_distance": PositionalDistance,
+    'shf_depth': ShuffledDepth,
+    'shf_distance': ShuffledDistance
 }
 
 
@@ -102,6 +105,8 @@ class TFRecordWriter(TFRecordWrapper):
                     if task in ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'rnd_distance', 'rnd_depth',
                                 'pos_distance', 'pos_depth']:
                         fn_task = 'dep+lex+rnd+pos'
+                    elif task in ['shf_distance', 'shf_depth']:
+                        fn_task = 'shf'
                     elif task == 'cor_distance':
                         fn_task = 'cor'
                     else:
