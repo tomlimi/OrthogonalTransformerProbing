@@ -20,17 +20,17 @@ from data_support.shuffled import ShuffledDistance, ShuffledDepth
 central_storage_strategy = tf.distribute.experimental.CentralStorageStrategy()
 
 conllu_wrappers = {
-	"dep_distance": DependencyDistance,
-	"dep_depth": DependencyDepth,
-	"lex_distance": LexicalDistance,
-	"lex_depth": LexicalDepth,
-	"cor_distance": CoreferenceDistance,
-	"rnd_depth": RandomDepth,
-	"rnd_distance": RandomDistance,
-	"pos_depth": PositionalDepth,
-	"pos_distance": PositionalDistance,
-    'shf_depth': ShuffledDepth,
-    'shf_distance': ShuffledDistance
+    "dep_distance": DependencyDistance,
+    "dep_depth": DependencyDepth,
+    "lex_distance": LexicalDistance,
+    "lex_depth": LexicalDepth,
+    "cor_distance": CoreferenceDistance,
+    "rnd_depth": RandomDepth,
+    "rnd_distance": RandomDistance,
+    "pos_depth": PositionalDepth,
+    "pos_distance": PositionalDistance,
+    "shf_depth": ShuffledDepth,
+    "shf_distance": ShuffledDistance
 }
 
 

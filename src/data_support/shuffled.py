@@ -40,7 +40,7 @@ class ShuffledDistance(ConllWrapper):
 			yield tf.constant(sentence_distances, dtype=tf.float32), sentence_mask
 
 	def training_examples(self, shuffle=True):
-		super().training_examples(shuffle)
+		return super().training_examples(shuffle)
 
 
 class ShuffledDepth(ConllWrapper):
@@ -68,4 +68,4 @@ class ShuffledDepth(ConllWrapper):
 			yield tf.constant(sentence_depths, dtype=tf.float32), sentence_mask
 			
 	def training_examples(self, shuffle=True):
-		super().training_examples(shuffle)
+		return super().training_examples(shuffle)
