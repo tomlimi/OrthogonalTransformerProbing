@@ -25,7 +25,7 @@ class Network():
     ES_PATIENCE = 4
     ES_DELTA = 1e-4
 
-    PENALTY_THRESHOLD = 0.2
+    PENALTY_THRESHOLD = 1.5
     INITIAL_EPOCHS = 3
 
     class Probe():
