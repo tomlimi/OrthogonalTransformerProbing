@@ -47,8 +47,10 @@ if __name__ == "__main__":
 			data_map = json.load(data_f)
 		for data_argument, data_value in data_map.items():
 			setattr(args, data_argument, data_value)
-
-	experiment_name = f"task_{'_'.join(args.tasks)}-layer_{args.layer_index}-trainl_{'_'.join(args.languages)}"
+	if args.seed == 42:
+		experiment_name = f"task_{'_'.join(args.tasks)}-layer_{args.layer_index}-trainl_{'_'.join(args.languages)}"
+	else:
+		experiment_name = f"task_{'_'.join(args.tasks)}-layer_{args.layer_index}-trainl_{'_'.join(args.languages)}-seed_{args.seed}"
 	args.out_dir = os.path.join(args.parent_dir,experiment_name)
 	if not os.path.exists(args.out_dir):
 		os.mkdir(args.out_dir)
