@@ -2,7 +2,7 @@ import tensorflow as tf
 from tqdm import tqdm
 import os
 import json
-from collections import defaultdict
+from collections import defaultdict, Mapping
 from itertools import chain
 from copy import deepcopy
 
@@ -34,6 +34,21 @@ conllu_wrappers = {
 }
 
 
+
+def merge_dict(d1, d2):
+    """
+    Modifies d1 in-place to contain values from d2.  If any value
+    in d1 is a dictionary (or dict-like), *and* the corresponding
+    value in d2 is also a dictionary, then merge them in-place.
+    """
+    for k,v2 in d2.items():
+        v1 = d1.get(k) # returns None if v1 has no value for this key
+        if ( isinstance(v1, Mapping) and
+             isinstance(v2, Mapping) ):
+            merge_dict(v1, v2)
+        else:
+            d1[k] = v2
+
 class TFRecordWrapper:
 
     modes = ['train', 'dev', 'test']
@@ -60,7 +75,13 @@ class TFRecordWrapper:
         with open(os.path.join(data_dir,self.data_map_fn),'r') as in_json:
             in_dict = json.load(in_json)
         for attribute, value in in_dict.items():
-            self.__setattr__(attribute, value)
+            if attribute in ("tasks", "models", "languages"):
+                present_value = self.__getattribute__(attribute)
+                self.__setattr__(attribute, list(set(present_value + value)))
+            elif attribute == "map_tfrecord":
+                merge_dict(self.map_tfrecord, value)
+            elif attribute == "map_conll":
+                merge_dict(self.map_conll, value)
 
     def _to_json(self, data_dir):
         out_dict = {"tasks": self.tasks,
@@ -75,7 +96,7 @@ class TFRecordWrapper:
 
 class TFRecordWriter(TFRecordWrapper):
 
-    def __init__(self, models, mode_language_tasks_conll):
+    def __init__(self, models, mode_language_tasks_conll, data_dir):
 
         languages = [lang for _, lang, _, _ in mode_language_tasks_conll]
         unique_tasks = list(set(chain(*[tasks.split(',') for _, _, tasks, _ in mode_language_tasks_conll])))
@@ -85,6 +106,8 @@ class TFRecordWriter(TFRecordWrapper):
         #map_connl = {mode: {lang: {tasks: conll}} for mode, lang, tasks, conll in mode_language_tasks_conll}
 
         super().__init__(unique_tasks, models, languages)
+        if os.path.isfile(os.path.join(data_dir, self.data_map_fn)):
+            self._from_json(data_dir)
 
         self.model2conll = defaultdict(set)
 
