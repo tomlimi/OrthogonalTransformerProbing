@@ -11,7 +11,6 @@ from transformers import BertTokenizer, TFBertModel
 import constants
 from data_support.dependency import DependencyDistance, DependencyDepth
 from data_support.lexical import LexicalDistance, LexicalDepth
-from data_support.coreference import CoreferenceDistance
 from data_support.random import RandomDistance, RandomDepth
 from data_support.positional import PositionalDistance, PositionalDepth
 from data_support.shuffled import ShuffledDistance, ShuffledDepth
@@ -24,7 +23,6 @@ conllu_wrappers = {
     "dep_depth": DependencyDepth,
     "lex_distance": LexicalDistance,
     "lex_depth": LexicalDepth,
-    "cor_distance": CoreferenceDistance,
     "rnd_depth": RandomDepth,
     "rnd_distance": RandomDistance,
     "pos_depth": PositionalDepth,
