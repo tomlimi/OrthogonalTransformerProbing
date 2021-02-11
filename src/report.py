@@ -34,7 +34,7 @@ if __name__ == "__main__":
 	                         "Averaged results are reported (similart to Cross Validation).")
 
 	# Probe arguments
-	parser.add_argument("--no-ml-probe", action="store_true", help="Resign from ml probe (store false)")
+	parser.add_argument("--no-ortho-probe", action="store_true", help="Resign from ortho probe (store false)")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
 	# Specify Bert Model
 	parser.add_argument("--casing", default=constants.CASING_CASED, help="Bert model casing")
@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 	# compatibility
-	args.ml_probe = not args.no_ml_probe
+	args.ml_probe = not args.no_ortho_probe
 
 	# if args.json_data:
 	# 	with open(args.json_data, 'r') as data_f:
@@ -69,7 +69,7 @@ if __name__ == "__main__":
 	if not os.path.exists(args.out_dir):
 		os.mkdir(args.out_dir)
 
-	args.bert_path = "bert-{}{}-{}".format(args.size, args.language, args.casing)
+	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	do_lower_case = (args.casing == "uncased")
 
 	tf_reader = TFRecordReader(args.data_dir, args.bert_path)

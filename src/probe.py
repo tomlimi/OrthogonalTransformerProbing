@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
 	# Probe arguments
 	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
-	parser.add_argument("--no-ml-probe", action="store_true", help="Resign from ml probe (store false)")
+	parser.add_argument("--no-ortho-probe", action="store_true", help="Resign from ortho probe (store false)")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
 	# Train arguments
 	parser.add_argument("--seed", default=42, type=int, help="Seed for variable initialisation")
@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 	# compatibility
-	args.ml_probe = not args.no_ml_probe
+	args.ml_probe = not args.no_ortho_probe
 
 	if args.json_data:
 		with open(args.json_data, 'r') as data_f:
@@ -55,7 +55,7 @@ if __name__ == "__main__":
 	if not os.path.exists(args.out_dir):
 		os.mkdir(args.out_dir)
 
-	args.bert_path = "bert-{}{}-{}".format(args.size, args.language, args.casing)
+	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	do_lower_case = (args.casing == "uncased")
 
 	tf_reader = TFRecordReader(args.data_dir, args.bert_path)

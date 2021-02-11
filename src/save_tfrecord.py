@@ -12,21 +12,16 @@ if __name__ == "__main__":
 	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
 	args = parser.parse_args()
 
-	args.bert_path = "bert-{}{}-{}".format(args.size, args.language, args.casing)
+	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
 	models = [args.bert_path]
 	languages = ['en']
-	data_spec = [('train', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_distance,rnd_depth,pos_distance,pos_depth',
-	              '../resources/endev.conllu'),
-	             ('dev', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_depth,pos_distance,pos_depth',
-	              '../resources/endev.conllu'),
-	             ('test', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_depth,pos_distance,pos_depth',
-	              '../resources/endev.conllu'),
-	             ('train', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll'),
-	             ('dev', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll'),
-	             ('test', 'en', 'cor_distance', '../resources/wsj_coref.dev.en.conll')
-	             ]
+	data_spec = [
+		('train', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_distance,rnd_depth,pos_distance,pos_depth', '../resources/entrain.conllu'),
+		('dev', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_depth,pos_distance,pos_depth', '../resources/endev.conllu'),
+		('test', 'en', 'dep_distance,dep_depth,lex_distance,lex_depth,rnd_depth,pos_distance,pos_depth', '../resources/entest.conllu')
+	]
 
-	tasks = ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'cor_distance', 'pos_distance', 'pos_depth']
+	tasks = ['dep_distance', 'dep_depth', 'lex_distance', 'lex_depth', 'pos_distance', 'pos_depth']
 
-	tf_writer = TFRecordWriter(models, data_spec)
+	tf_writer = TFRecordWriter(models, data_spec, args.data_dir)
 	tf_writer.compute_and_save(args.data_dir)
