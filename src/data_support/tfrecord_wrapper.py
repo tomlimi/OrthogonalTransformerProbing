@@ -7,6 +7,8 @@ from itertools import chain
 from copy import deepcopy
 
 from transformers import BertTokenizer, TFBertModel
+from transformers import RobertaTokenizer, TFRobertaModel
+from transformers import XLMRobertaTokenizer, TFXLMRobertaModel
 
 import constants
 from data_support.dependency import DependencyDistance, DependencyDepth
@@ -118,6 +120,7 @@ class TFRecordWriter(TFRecordWrapper):
         self.model2tfrs = defaultdict(set)
         self.tfr2tasks = defaultdict(set)
         self.tfr2conll = dict()
+        self.tfr2lang = dict()
 
         for mode, lang, tasks, conll in mode_language_tasks_conll:
             for model in models:
@@ -140,6 +143,7 @@ class TFRecordWriter(TFRecordWrapper):
                     self.model2tfrs[model].add(tfr_fn)
                     self.tfr2tasks[tfr_fn].add(task)
                     self.tfr2conll[tfr_fn] = conll
+                    self.tfr2lang[tfr_fn] = lang
 
     def compute_and_save(self, data_dir):
 
@@ -153,9 +157,10 @@ class TFRecordWriter(TFRecordWrapper):
                     continue
 
                 conll_fn = self.tfr2conll[tfrecord_file]
+                lang = self.tfr2lang[tfrecord_file]
                 tasks = list(self.tfr2tasks[tfrecord_file])
 
-                in_datasets = [conllu_wrappers[task](conll_fn, tokenizer) for task in tasks]
+                in_datasets = [conllu_wrappers[task](conll_fn, tokenizer, lang=lang) for task in tasks]
                 all_wordpieces, all_segments, all_token_len = in_datasets[0].training_examples()
 
                 options = tf.io.TFRecordOptions()#compression_type='GZIP')
@@ -177,8 +182,19 @@ class TFRecordWriter(TFRecordWrapper):
 
     @staticmethod
     def get_model_tokenizer(model_path, do_lower_case):
-        tokenizer = BertTokenizer.from_pretrained(model_path, do_lower_case=do_lower_case)
-        model = TFBertModel.from_pretrained(model_path, output_hidden_states=True)
+        if model_path.startswith('bert'):
+            tokenizer = BertTokenizer.from_pretrained(model_path, do_lower_case=do_lower_case)
+            model = TFBertModel.from_pretrained(model_path, output_hidden_states=True, output_attentions=False)
+        elif model_path.startswith('roberta'):
+            tokenizer = RobertaTokenizer.from_pretrained(model_path, do_lower_case=do_lower_case, add_prefix_space=True)
+            model = TFRobertaModel.from_pretrained(model_path, output_hidden_states=True, output_attentions=False)
+        elif model_path.startswith('jplu/tf-xlm-roberta'):
+            tokenizer = XLMRobertaTokenizer.from_pretrained(model_path, do_lower_case=do_lower_case)
+            model = TFXLMRobertaModel.from_pretrained(model_path, output_hidden_states=True, output_attentions=False)
+        else:
+            raise ValueError(f"Unknown Transformer name: {model_path}. "
+                             f"Please select one of the supported models: {constants.SUPPORTED_MODELS}")
+        
         return model, tokenizer
 
     @staticmethod
@@ -187,8 +203,8 @@ class TFRecordWriter(TFRecordWrapper):
         segments = tf.expand_dims(segments, 0)
         max_token_len = tf.constant(token_len, shape=(1,), dtype=tf.int64)
 
-        _, _, hidden = model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
-        embeddings = hidden[1:]
+        model_output = model(wordpieces, attention_mask=tf.sign(wordpieces), training=False)
+        embeddings = model_output.hidden_states[1:]
 
         # average wordpieces to obtain word representation
         # cut to max nummber of words in batch, note that batch.max_token_len is a tensor, bu all the values are the same

@@ -126,7 +126,7 @@ class ConllWrapper():
                 
                 sent_tokens = list(np.array(sent_tokens)[sent_shuf])
                 
-            sent_wordpieces = ["[CLS]"] + self.tokenizer.tokenize((' '.join(sent_tokens)), add_special_tokens=False) + ["[SEP]"]
+            sent_wordpieces = [self.tokenizer.cls_token] + self.tokenizer.tokenize((' '.join(sent_tokens))) + [self.tokenizer.sep_token]
 
             if len(sent_tokens) >= constants.MAX_TOKENS:
                 print(f"Sentence {idx} too many tokens, in file {self.conllu_name}, skipping.")
@@ -161,7 +161,7 @@ class ConllWrapper():
                 sent_shuf = self.shuffled[sent_idx]
                 sent_tokens = list(np.array(sent_tokens)[sent_shuf])
             for token in sent_tokens:
-                worpieces_per_token = len(self.tokenizer.tokenize(token, add_special_tokens=False))
+                worpieces_per_token = len(self.tokenizer.tokenize(token))
                 sent_segments[wordpiece_pointer:wordpiece_pointer+worpieces_per_token] = segment_id
                 wordpiece_pointer += worpieces_per_token
                 segment_id += 1
