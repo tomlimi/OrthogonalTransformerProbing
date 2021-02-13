@@ -30,8 +30,8 @@ class Network():
 
     class Probe():
         def __init__(self, args):
-            self.probe_rank = constants.MODEL_DIMS[args.bert_path]
-            self.model_dim = constants.MODEL_DIMS[args.bert_path]
+            self.probe_rank = args.probe_rank
+            self.model_dim = constants.MODEL_DIMS[args.model]
             self.languages = args.languages
 
             self.ml_probe = args.ml_probe

@@ -20,7 +20,7 @@ if __name__ == "__main__":
 	                    help="Probing tasks (distance, lex-distance, depth or lex-depth)")
 
 	# Probe arguments
-	parser.add_argument("--probe-rank", default=768, type=int, help="Rank of the probe")
+	parser.add_argument("--probe-rank", default=None, type=int, help="Rank of the probe")
 	parser.add_argument("--no-ortho-probe", action="store_true", help="Resign from ortho probe (store false)")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
 	# Train arguments
@@ -32,21 +32,18 @@ if __name__ == "__main__":
 	parser.add_argument("--l1", default=None, type=float, help="L1 reguralization of the weights.")
 	parser.add_argument("--clip-norm", default=None, type=float, help="Clip gradient norm to this value")
 	# Specify Bert Model
-	parser.add_argument("--casing", default=constants.CASING_CASED, help="Bert model casing")
-	parser.add_argument("--language", default=constants.LANGUAGE_MULTILINGUAL, help="Bert model language")
-	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
-
-
+	parser.add_argument("--model",
+	                    default=f"bert-{constants.SIZE_BASE}-{constants.LANGUAGE_MULTILINGUAL}-{constants.CASING_CASED}",
+	                    help="Transformer model name (see: https://huggingface.co/transformers/pretrained_models.html)")
 
 	args = parser.parse_args()
-	# compatibility
-	args.ml_probe = not args.no_ortho_probe
 
-	if args.json_data:
-		with open(args.json_data, 'r') as data_f:
-			data_map = json.load(data_f)
-		for data_argument, data_value in data_map.items():
-			setattr(args, data_argument, data_value)
+	args.ml_probe = not args.no_ortho_probe
+	if not args.probe_rank:
+		args.probe_rank = constants.MODEL_DIMS[args.model]
+		
+	do_lower_case = (constants.CASING_UNCASED in args.model)
+
 	if args.seed == 42:
 		experiment_name = f"task_{'_'.join(args.tasks)}-layer_{args.layer_index}-trainl_{'_'.join(args.languages)}"
 	else:
@@ -55,10 +52,7 @@ if __name__ == "__main__":
 	if not os.path.exists(args.out_dir):
 		os.mkdir(args.out_dir)
 
-	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
-	do_lower_case = (args.casing == "uncased")
-
-	tf_reader = TFRecordReader(args.data_dir, args.bert_path)
+	tf_reader = TFRecordReader(args.data_dir, args.model)
 	tf_reader.read(args.tasks, args.languages)
 
 	network = Network(args)

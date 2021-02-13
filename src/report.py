@@ -3,7 +3,7 @@ import argparse
 import json
 
 from data_support.conll_wrapper import ConllWrapper
-from data_support.tfrecord_wrapper import TFRecordReader
+from data_support.tfrecord_wrapper import TFRecordReader, TFRecordWriter
 from network import Network
 
 from reporting.reporter import CorrelationReporter
@@ -34,15 +34,15 @@ if __name__ == "__main__":
 	                         "Averaged results are reported (similart to Cross Validation).")
 
 	# Probe arguments
+	parser.add_argument("--probe-rank", default=None, type=int, help="Rank of the probe")
 	parser.add_argument("--no-ortho-probe", action="store_true", help="Resign from ortho probe (store false)")
 	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
-	# Specify Bert Model
-	parser.add_argument("--casing", default=constants.CASING_CASED, help="Bert model casing")
-	parser.add_argument("--language", default=constants.LANGUAGE_MULTILINGUAL, help="Bert model language")
-	parser.add_argument("--size", default=constants.SIZE_BASE, help="Bert model size")
+	# Specify Transformer Model
+	parser.add_argument("--model",
+	                    default=f"bert-{constants.SIZE_BASE}-{constants.LANGUAGE_MULTILINGUAL}-{constants.CASING_CASED}",
+	                    help="Transformer model name (see: https://huggingface.co/transformers/pretrained_models.html)")
 
 	# Train arguments
-	# TODO: these are not required here, try to delete it
 	parser.add_argument("--seed", default=42, type=int, help="Seed for variable initialisation")
 	parser.add_argument("--batch-size", default=20, type=int, help="Batch size")
 	parser.add_argument("--epochs", default=40, type=int, help="Maximal number of training epochs")
@@ -52,14 +52,12 @@ if __name__ == "__main__":
 	parser.add_argument("--clip-norm", default=None, type=float, help="Clip gradient norm to this value")
 
 	args = parser.parse_args()
-	# compatibility
-	args.ml_probe = not args.no_ortho_probe
 
-	# if args.json_data:
-	# 	with open(args.json_data, 'r') as data_f:
-	# 		data_map = json.load(data_f)
-	# 	for data_argument, data_value in data_map.items():
-	# 		setattr(args, data_argument, data_value)
+	args.ml_probe = not args.no_ortho_probe
+	if not args.probe_rank:
+		args.probe_rank = constants.MODEL_DIMS[args.model]
+		
+	do_lower_case = (constants.CASING_UNCASED in args.model)
 
 	if args.seed == 42:
 		experiment_name = f"task_{'_'.join(args.tasks)}-layer_{args.layer_index}-trainl_{'_'.join(args.languages)}"
@@ -69,10 +67,7 @@ if __name__ == "__main__":
 	if not os.path.exists(args.out_dir):
 		os.mkdir(args.out_dir)
 
-	args.bert_path = "bert-{}-{}-{}".format(args.size, args.language, args.casing)
-	do_lower_case = (args.casing == "uncased")
-
-	tf_reader = TFRecordReader(args.data_dir, args.bert_path)
+	tf_reader = TFRecordReader(args.data_dir, args.model)
 	tf_reader.read(args.tasks, args.languages)
 
 	network = Network(args)
@@ -90,6 +85,7 @@ if __name__ == "__main__":
 		reporter.compute(args)
 		reporter.write(args)
 
+	# random structure is a control task, so evaluation is done on train set to measure memorization
 	rnd_tasks = set(args.tasks).intersection({"rnd_depth", "rnd_distance"})
 	if rnd_tasks:
 		rnd_reporter = CorrelationReporter(args, network, rnd_tasks, tf_reader.train, 'train')
@@ -97,10 +93,11 @@ if __name__ == "__main__":
 		rnd_reporter.write(args)
 
 	if 'dep_distance' in args.tasks:
-		tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=do_lower_case)
+		_, tokenizer = TFRecordWriter.get_model_tokenizer(args.model, do_lower_case=do_lower_case)
+		#tokenizer = BertTokenizer.from_pretrained(args.model, do_lower_case=do_lower_case)
 		conll_dict = {}
 		for lang in args.languages:
-			lang_conll = ConllWrapper(tf_reader.map_conll['test'][args.bert_path][lang]['dep_distance'], tokenizer)
+			lang_conll = ConllWrapper(tf_reader.map_conll['test'][args.model][lang]['dep_distance'], tokenizer)
 			lang_conll.training_examples()
 			conll_dict[lang] = lang_conll
 
