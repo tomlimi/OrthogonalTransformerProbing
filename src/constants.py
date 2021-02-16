@@ -23,7 +23,8 @@ pos2wnpos = {"NOUN": wn.NOUN,
              # "ADJ": wn.ADJ,
              # "ADV": wn.ADV}
              
-lang2iso = {'en': 'eng', 'es': 'spa', 'fi': 'fin', 'pl': 'pol', 'ar': 'arb', 'id': 'ind', 'zh': 'cmn', 'fr': 'fra'}
+lang2iso = {'en': 'eng', 'es': 'spa', 'fi': 'fin', 'pl': 'pol','ar': 'arb',
+            'id': 'ind', 'zh': 'cmn', 'fr': 'fra', 'sl': 'slv'}
 
 # BERT model parameters
 LANGUAGE_CHINESE = "chinese"
@@ -81,4 +82,4 @@ BERT_MODEL_DIR = "/net/projects/bert/models/"
 
 #data pipeline options
 BUFFER_SIZE = 50 * 1000 * 1000
-SHUFFLE_SIZE = 768
+SHUFFLE_SIZE = 512
