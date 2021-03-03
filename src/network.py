@@ -100,7 +100,21 @@ class Network():
             self._train_fns = {lang: {task: self.train_factory(lang, task)
                                       for task in self.tasks}
                                for lang in self.languages}
-
+            
+        @tf.function
+        def get_projections(self, embeddings, max_token_len, language, task):
+            """ Computes projections after Orthogonal Transformation, and after Dimension Scaling"""
+            embeddings = embeddings[:, :max_token_len, :]
+            orthogonal_projections = None
+            if self.probe.ml_probe:
+                orthogonal_projections = embeddings @ self.probe.LanguageMaps[language]
+            if self.probe._orthogonal_reg and self.probe.ml_probe:
+                projections = orthogonal_projections * self.DistanceProbe[task]
+            else:
+                projections = embeddings @ self.DistanceProbe[task]
+    
+            return orthogonal_projections, projections
+            
         @tf.function
         def _forward(self, embeddings, max_token_len, language, task, embeddings_gate=None):
             """ Computes all n^2 pairs of distances after projection
@@ -109,21 +123,14 @@ class Network():
             Note that due to padding, some distances will be non-zero for pads.
             Computes (B(h_i-h_j))^T(B(h_i-h_j)) for all i,j
             """
+            
+            _, projections = self.get_projections(embeddings, max_token_len, language, task)
+            if embeddings_gate is not None:
+                projections = projections * embeddings_gate
 
-            embeddings = embeddings[:,:max_token_len,:]
-            if self.probe.ml_probe:
-                embeddings = embeddings @ self.probe.LanguageMaps[language]
-            if self.probe._orthogonal_reg and self.probe.ml_probe:
-                embeddings = embeddings * self.DistanceProbe[task]
-                if embeddings_gate is not None:
-                    embeddings = embeddings * embeddings_gate
-            else:
-                embeddings = embeddings @ self.DistanceProbe[task]
-
-
-            embeddings = tf.expand_dims(embeddings, 1)  # shape [batch, 1, seq_len, emb_dim]
-            transposed_embeddings = tf.transpose(embeddings, perm=(0, 2, 1, 3))  # shape [batch, seq_len, 1, emb_dim]
-            diffs = embeddings - transposed_embeddings  # shape [batch, seq_len, seq_len, emb_dim]
+            projections = tf.expand_dims(projections, 1)  # shape [batch, 1, seq_len, emb_dim]
+            transposed_projections = tf.transpose(projections, perm=(0, 2, 1, 3))  # shape [batch, seq_len, 1, emb_dim]
+            diffs = projections - transposed_projections  # shape [batch, seq_len, seq_len, emb_dim]
             squared_diffs = tf.reduce_sum(tf.math.square(diffs), axis=-1) # shape [batch, seq_len, seq_len]
             return squared_diffs
 
@@ -220,23 +227,32 @@ class Network():
                                for lang in self.languages}
 
         @tf.function
+        def get_projections(self, embeddings, max_token_len, language, task):
+            """ Computes projections after Orthogonal Transformation, and after Dimension Scaling"""
+            embeddings = embeddings[:, :max_token_len, :]
+            orthogonal_projections = None
+            if self.probe.ml_probe:
+                orthogonal_projections = embeddings @ self.probe.LanguageMaps[language]
+            if self.probe._orthogonal_reg and self.probe.ml_probe:
+                projections = orthogonal_projections * self.DepthProbe[task]
+            else:
+                projections = embeddings @ self.DepthProbe[task]
+    
+            return orthogonal_projections, projections
+        
+        @tf.function
         def _forward(self, embeddings, max_token_len, language, task, embeddings_gate=None):
             """ Computes all n depths after projection for each sentence in a batch.
             Computes (Bh_i)^T(Bh_i) for all i
             """
-            embeddings = embeddings[:, :max_token_len, :]
-            if self.probe.ml_probe:
-                embeddings = embeddings @ self.probe.LanguageMaps[language]
-            if self.probe._orthogonal_reg and self.probe.ml_probe:
-                embeddings = embeddings * self.DepthProbe[task]
-                if embeddings_gate is not None:
-                    embeddings = embeddings * embeddings_gate
-            else:
-                embeddings = embeddings @ self.DepthProbe[task]
+            _, projections = self.get_projections(embeddings, max_token_len, language, task)
 
-            squared_norms = tf.norm(embeddings, ord='euclidean', axis=2) ** 2.
+            if embeddings_gate is not None:
+                projections = projections * embeddings_gate
+
+            squared_norms = tf.norm(projections, ord='euclidean', axis=2) ** 2.
             return squared_norms
-
+        
         @tf.function
         def _loss(self, predicted_depths, gold_depths, mask, token_lens):
             sentence_loss = tf.reduce_sum(tf.abs(predicted_depths - gold_depths) * mask, axis=1) / \
