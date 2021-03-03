@@ -47,7 +47,8 @@ SUPPORTED_MODELS = {f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}",
                     f"roberta-{SIZE_BASE}",
                     f"roberta-{SIZE_LARGE}",
                     f"xlm-roberta-{SIZE_BASE}",
-                    f"xlm-roberta-{SIZE_LARGE}"
+                    f"xlm-roberta-{SIZE_LARGE}",
+                    f"random-bert"
                     }
 
 MODEL_DIMS = {f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 768,
@@ -61,8 +62,10 @@ MODEL_DIMS = {f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 768,
               f"roberta-{SIZE_BASE}": 768,
               f"roberta-{SIZE_LARGE}": 1024,
               f"xlm-roberta-{SIZE_BASE}": 768,
-              f"xlm-roberta-{SIZE_LARGE}": 1024
+              f"xlm-roberta-{SIZE_LARGE}": 1024,
+              f"random-bert": 768
               }
+
 
 MODEL_LAYERS = {f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 12,
                 f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_UNCASED}": 12,
@@ -75,7 +78,8 @@ MODEL_LAYERS = {f"bert-{SIZE_BASE}-{LANGUAGE_MULTILINGUAL}-{CASING_CASED}": 12,
                 f"roberta-{SIZE_BASE}": 12,
                 f"roberta-{SIZE_LARGE}": 24,
                 f"xlm-roberta-{SIZE_BASE}": 12,
-                f"xlm-roberta-{SIZE_LARGE}": 24
+                f"xlm-roberta-{SIZE_LARGE}": 24,
+                f"random-bert": 12
                 }
 
 BERT_MODEL_DIR = "/net/projects/bert/models/"

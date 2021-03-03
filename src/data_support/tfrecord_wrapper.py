@@ -6,7 +6,7 @@ from collections import defaultdict, Mapping
 from itertools import chain
 from copy import deepcopy
 
-from transformers import BertTokenizer, TFBertModel
+from transformers import BertTokenizer, BertConfig, TFBertModel
 from transformers import RobertaTokenizer, TFRobertaModel
 from transformers import XLMRobertaTokenizer, TFXLMRobertaModel
 
@@ -32,7 +32,6 @@ conllu_wrappers = {
     "shf_depth": ShuffledDepth,
     "shf_distance": ShuffledDistance
 }
-
 
 
 def merge_dict(d1, d2):
@@ -181,7 +180,7 @@ class TFRecordWriter(TFRecordWrapper):
         return f"{model}_{lang}_{fn_task}_{conll_name}.tfrecord"
 
     @staticmethod
-    def get_model_tokenizer(model_path, do_lower_case):
+    def get_model_tokenizer(model_path, do_lower_case, seed=42):
         if model_path.startswith('bert'):
             tokenizer = BertTokenizer.from_pretrained(model_path, do_lower_case=do_lower_case)
             model = TFBertModel.from_pretrained(model_path, output_hidden_states=True, output_attentions=False)
@@ -191,6 +190,10 @@ class TFRecordWriter(TFRecordWrapper):
         elif model_path.startswith('jplu/tf-xlm-roberta'):
             tokenizer = XLMRobertaTokenizer.from_pretrained(model_path, do_lower_case=do_lower_case)
             model = TFXLMRobertaModel.from_pretrained(model_path, output_hidden_states=True, output_attentions=False)
+        elif model_path.startswith('random-bert'):
+            tokenizer = BertTokenizer.from_pretrained("bert-base-cased", do_lower_case=True)
+            config = BertConfig(seed=seed, output_hidden_states=True, output_attentions=False)
+            model = TFBertModel(config)
         else:
             raise ValueError(f"Unknown Transformer name: {model_path}. "
                              f"Please select one of the supported models: {constants.SUPPORTED_MODELS}")
