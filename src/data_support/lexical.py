@@ -36,8 +36,7 @@ class LexicalDistance(ConllWrapper):
             sentence_distances = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
             sentence_mask = np.zeros((constants.MAX_TOKENS, constants.MAX_TOKENS), dtype=np.float32)
             for i in range(sentence_length):
-                # simialarity of word with itself is masked, because it is to simple exampl
-                for j in range(i, sentence_length):
+                for j in range(i+1, sentence_length):
                     if sentence_lemmas[i] == sentence_lemmas[j] and sentence_pos[i] == sentence_pos[j]:
                         i_j_distance = 0
                     else:
