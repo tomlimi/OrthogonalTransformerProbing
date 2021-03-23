@@ -31,7 +31,10 @@ if __name__ == "__main__":
 	parser.add_argument("--ortho", default=None, type=float, help="Orthogonality reguralization (SRIP) for language map matrices.")
 	parser.add_argument("--l1", default=None, type=float, help="L1 reguralization of the weights.")
 	parser.add_argument("--clip-norm", default=None, type=float, help="Clip gradient norm to this value")
-	# Specify Bert Model
+
+	parser.add_argument("--subsample-train", default=None, type=int, help="Size of subsample taken from a training set.")
+	parser.add_argument("--zs-dep-languages", nargs='*', default=[], type=str, help="List of languages to disregard in dependency probing training (to evaluate 0 shot capability).")
+        # Specify Bert Model
 	parser.add_argument("--model",
 	                    default=f"bert-{constants.SIZE_BASE}-{constants.LANGUAGE_MULTILINGUAL}-{constants.CASING_CASED}",
 	                    help="Transformer model name (see: https://huggingface.co/transformers/pretrained_models.html)")

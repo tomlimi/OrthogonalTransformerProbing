@@ -51,6 +51,8 @@ if __name__ == "__main__":
 	parser.add_argument("--l1", default=None, type=float, help="L1 reguralization of the weights.")
 	parser.add_argument("--clip-norm", default=None, type=float, help="Clip gradient norm to this value")
 
+	parser.add_argument("--subsample-train", default=None, type=int, help="Size of subsample taken from a training set.")
+	parser.add_argument("--zs-dep-languages", nargs='*', default=[], type=str, help="List of languages to disregard in dependency probing training (to evaluate 0 shot capability).")
 	args = parser.parse_args()
 
 	args.ml_probe = not args.no_ortho_probe
@@ -78,7 +80,6 @@ if __name__ == "__main__":
 		dim_reporter = SelectedDimensionalityReporter(args, network, args.tasks, None, None)
 		dim_reporter.compute(args)
 		dim_reporter.write(args)
-
 	tasks = set(args.tasks).difference({"rnd_depth", "rnd_distance"})
 	if tasks:
 		reporter = CorrelationReporter(args, network, tasks, tf_reader.test, 'test')
@@ -106,7 +107,6 @@ if __name__ == "__main__":
 			depths = dep_reportet.compute(args)
 		else:
 			depths = None
-
 		uas_reporter = UASReporter(args, network, tf_reader.test, 'test', conll_dict, depths)
 		uas_reporter.compute(args)
 		uas_reporter.write(args)
