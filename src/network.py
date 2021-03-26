@@ -7,6 +7,7 @@ from functools import partial
 
 from tqdm import tqdm
 import numpy as np
+import resource
 
 import constants
 from data_support.tfrecord_wrapper import TFRecordReader
@@ -19,11 +20,40 @@ DER_DEV_SIZE = int(0.1 * DER_SIZE)
 
 central_storage_strategy = tf.distribute.experimental.CentralStorageStrategy()
 
+def prim_mst(matrix, n_vertices):
+    def minKey(C, mstSet, n_vertices):
+        # min_val = tf.Variable(np.inf, trainable=False, dtype=tf.float32)
+        # min_index = tf.Variable(0, trainable=False, dtype=tf.int32)
+        min_val = np.inf 
+        min_index = 0
+        for v in range(n_vertices):
+            if C[v] < min_val and mstSet[v] == False:
+                min_val = C[v]
+                min_index = v
+        return min_index
+
+    C = [np.inf] * n_vertices
+    E = [0] * n_vertices
+    mstSet = [False] * n_vertices
+
+    C[0] = 0.
+    for cout in range(n_vertices):
+        u = minKey(C, mstSet, n_vertices)
+        mstSet[u] = True
+
+        for v in range(n_vertices):
+            if (matrix[u, v] > 0. and mstSet[v] == False and C[v] > matrix[u,v]):
+                C[v] = matrix[u, v]
+                E[v] = u
+
+    return E
+
+
 class Network():
 
     ONPLATEU_DECAY = 0.1
     ES_PATIENCE = 4
-    ES_DELTA = 1e-4
+    ES_DELTA = 1e-35
 
     PENALTY_THRESHOLD = 1.5
     INITIAL_EPOCHS = 3
@@ -140,18 +170,37 @@ class Network():
                             tf.clip_by_value(tf.reduce_sum(mask, axis=[1,2]), 1., constants.MAX_TOKENS ** 2.)
             return tf.reduce_mean(sentence_loss)
 
+        @tf.function
+        def _loss_mst(self, predicted_distances, gold_distances, mask, token_lens, mst_s):
+
+            @tf.function
+            def compute_mst_weight(tuple_input):
+                predicted_distances, n_vertices, mst = tuple_input
+                edges = tf.stack([tf.range(n_vertices, dtype=tf.int32), mst], axis=1)
+                return tf.reduce_sum(tf.gather_nd(predicted_distances, edges))
+
+            
+            gold_tree_weight = tf.reduce_sum(tf.where(gold_distances == 1.0, predicted_distances, 0), axis=[1,2]) / 2.
+            predicted_tree_weight = tf.map_fn(compute_mst_weight, (predicted_distances, token_lens, mst_s), fn_output_signature=tf.float32, parallel_iterations=12)
+
+            #TODO: think what to do to avoid all distances converging to 0
+            return tf.reduce_mean(gold_tree_weight - predicted_tree_weight)
+
         def train_factory(self, language, task):
             # separate train function is needed to avoid variable creation on non-first call
             # see: https://github.com/tensorflow/tensorflow/issues/27120
             @tf.function(experimental_relax_shapes=True)
-            def train_on_batch(target, mask, token_len, embeddings, l1_lambda=0.0):
+            def train_on_batch(target, mask, token_len, embeddings, l1_lambda=0.0, mst_s=None):
 
                 with tf.GradientTape() as tape:
                     max_token_len = tf.reduce_max(token_len)
                     target = target[:,:max_token_len,:max_token_len]
                     mask = mask[:,:max_token_len,:max_token_len]
                     predicted_distances = self._forward(embeddings, max_token_len, language, task)
-                    loss = self._loss(predicted_distances, target, mask, token_len)
+                    if task == 'dep_distance':
+                        loss = self._loss_mst(predicted_distances, target, mask, token_len, mst_s)
+                    else:
+                        loss = self._loss(predicted_distances, target, mask, token_len)
                     if self.probe._orthogonal_reg and self.probe.ml_probe:
                         ortho_penalty = self.probe.ortho_reguralization(self.probe.LanguageMaps[language])
                         loss += self.probe._orthogonal_reg * ortho_penalty
@@ -186,12 +235,15 @@ class Network():
             return train_on_batch
 
         @tf.function(experimental_relax_shapes=True)
-        def evaluate_on_batch(self, target, mask, token_len, embeddings, language, task):
+        def evaluate_on_batch(self, target, mask, token_len, embeddings, language, task, mst_s=None):
             max_token_len = tf.reduce_max(token_len)
             target = target[:, :max_token_len, :max_token_len]
             mask = mask[:, :max_token_len, :max_token_len]
             predicted_distances = self._forward(embeddings, max_token_len, language, task)
-            loss = self._loss(predicted_distances, target, mask, token_len)
+            if task == 'dep_distance':
+                loss = self._loss_mst(predicted_distances, target, mask, token_len, mst_s)
+            else:
+                loss = self._loss(predicted_distances, target, mask, token_len)
             return loss
 
         @tf.function(experimental_relax_shapes=True)
@@ -415,10 +467,22 @@ class Network():
                     batch_loss = self.depth_probe._train_fns[lang][task](
                         batch_target, batch_mask, batch_num_tokens, batch_embeddings, l1_lambda)
                 elif 'distance' in task:
-                    batch_loss = self.distance_probe._train_fns[lang][task](
-                        batch_target, batch_mask, batch_num_tokens, batch_embeddings, l1_lambda)
-
-                progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}")
+                    if task == 'dep_distance':
+                        predicted_distances = self.distance_probe.predict_on_batch(batch_num_tokens, batch_embeddings, lang, task)
+                        #multiprocess computation of Minumum Spanning Trees with Prim's algorithm.
+                        # with closing(multiprocessing.Pool(processes=3)) as pool:
+                        #    mst_s = pool.starmap(prim_mst, zip(predicted_distances.numpy(), batch_num_tokens.numpy()))
+                        mst_s = []
+                        for pred_dist, num_tokens in zip(predicted_distances.numpy(), batch_num_tokens.numpy()):
+                            mst_s.append(prim_mst(pred_dist, num_tokens))
+                        mst_tensor = tf.ragged.constant(mst_s)
+                        batch_loss = self.distance_probe._train_fns[lang][task](
+                            batch_target, batch_mask, batch_num_tokens, batch_embeddings, l1_lambda, mst_tensor)
+                    else:
+                        batch_loss = self.distance_probe._train_fns[lang][task](
+                            batch_target, batch_mask, batch_num_tokens, batch_embeddings, l1_lambda)
+                
+                progressbar.set_description(f"Training, batch loss: {batch_loss:.4f}, memory: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss /1024 / 1024:.2f}")
 
             eval_loss = self.evaluate(dev, 'validation', args)
             if eval_loss < self.optimal_loss - self.ES_DELTA:
@@ -457,7 +521,18 @@ class Network():
                 for batch_idx, (_, _, batch) in progressbar:
                     _, batch_target, batch_mask, batch_num_tokens, batch_embeddings = batch
                     if "distance" in task:
-                        batch_loss = self.distance_probe.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens,
+                        if task == 'dep_distance':
+                            predicted_distances = self.distance_probe.predict_on_batch(batch_num_tokens,
+                                                                                       batch_embeddings, language, task)
+                            mst_s = []
+                            for pred_dist, num_tokens in zip(predicted_distances.numpy(), batch_num_tokens.numpy()):
+                                mst_s.append(prim_mst(pred_dist, num_tokens))
+                            mst_tensor = tf.ragged.constant(mst_s)
+                            batch_loss = self.distance_probe.evaluate_on_batch(
+                                batch_target, batch_mask, batch_num_tokens, batch_embeddings, language, task, mst_tensor)
+                        
+                        else:
+                            batch_loss = self.distance_probe.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens,
                                                                            batch_embeddings, language, task)
                     elif "depth" in task:
                         batch_loss = self.depth_probe.evaluate_on_batch(batch_target, batch_mask, batch_num_tokens,
