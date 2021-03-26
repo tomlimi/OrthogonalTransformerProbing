@@ -360,25 +360,33 @@ class Network():
     def data_pipeline(tf_data, languages, tasks, args, mode='train'):
 
         datasets_to_interleve = []
-        for lang in languages:
-            if lang not in tf_data:
-                raise ValueError(f"Language: {lang} not found in the data set")
-            for task in tasks:
-                if task not in tf_data[lang]:
-                    raise ValueError(f"Task: {task} not found in the data set")
+        for langs in languages:
+            for lang in langs.split('+'):
+                if lang not in tf_data:
+                    raise ValueError(f"Language: {lang} not found in the data set")
+                for task in tasks:
+                    if task not in tf_data[lang]:
+                        raise ValueError(f"Task: {task} not found in the data set")
+                    elif lang in args.zs_dep_languages and 'dep_' in task:
+                        continue
 
-                data = tf_data[lang][task]
+                    data = tf_data[lang][task]
 
-                data = data.map(partial(Network.decode, task=task, layer_idx=args.layer_index),
-                                num_parallel_calls=tf.data.experimental.AUTOTUNE).cache()
+                    data = data.map(partial(Network.decode, task=task, layer_idx=args.layer_index),
+                            num_parallel_calls=tf.data.experimental.AUTOTUNE)
+                    if mode == 'train' and args.subsample_train:
+                        data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
+                        data = data.take(args.subsample_train)
+                    data = data.cache()
+                    if mode == 'train':
+                        data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
+                    data = data.batch(args.batch_size)
+                    data = data.map(lambda *x: (langs, task, x), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+                    data = data.prefetch(tf.data.experimental.AUTOTUNE)
+                    datasets_to_interleve.append(data)
 
-                if mode == 'train':
-                    data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
-                data = data.batch(args.batch_size)
-                data = data.map(lambda *x: (lang, task, x), num_parallel_calls=tf.data.experimental.AUTOTUNE)
-                data = data.prefetch(tf.data.experimental.AUTOTUNE)
-                datasets_to_interleve.append(data)
-
+        if len(datasets_to_interleve) == 0:
+            return []
         if len(datasets_to_interleve) == 1:
             return datasets_to_interleve[0]
 
@@ -386,7 +394,6 @@ class Network():
 
     def train(self, tf_reader, args):
         curr_patience = 0
-
         train = self.data_pipeline(tf_reader.train, self.languages, self.tasks, args, mode='train')
         dev = {lang: {task: self.data_pipeline(tf_reader.dev, [lang], [task], args, mode='dev')
                       for task in self.tasks}

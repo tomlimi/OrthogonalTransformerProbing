@@ -266,17 +266,18 @@ class TFRecordReader(TFRecordWrapper):
 
         for mode in self.modes:
             data_set = dict()
-            for lang in read_languages:
-                if lang not in self.languages:
-                    raise ValueError(f"Data for this language is not available in the directory: {lang}\n"
-                                     f" supported languages: {self.languages}")
-                data_set[lang] = dict()
-                for task in read_tasks:
-                    if task not in self.tasks:
-                        raise ValueError(f"Data for this task is not available in the directory: {task}\n"
+            for langs in read_languages:
+                for lang in langs.split('+'):
+                    if lang not in self.languages:
+                        raise ValueError(f"Data for this language is not available in the directory: {lang}\n"
+                                        f" supported languages: {self.languages}")
+                    data_set[lang] = dict()
+                    for task in read_tasks:
+                        if task not in self.tasks:
+                            raise ValueError(f"Data for this task is not available in the directory: {task}\n"
                                          f" supported tasks: {self.tasks}")
-                    tfr_fn = os.path.join(self.data_dir, self.map_tfrecord[mode][self.model_name][lang][task])
-                    data_set[lang][task] = tf.data.TFRecordDataset(tfr_fn,
+                        tfr_fn = os.path.join(self.data_dir, self.map_tfrecord[mode][self.model_name][lang][task])
+                        data_set[lang][task] = tf.data.TFRecordDataset(tfr_fn,
                                                                    #compression_type='GZIP',
                                                                    buffer_size=constants.BUFFER_SIZE)
 
