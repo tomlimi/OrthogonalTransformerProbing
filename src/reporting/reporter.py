@@ -37,8 +37,8 @@ class Reporter():
 
 		return tf.constant(embedding_gate, dtype=tf.float32)
 
-	def predict(self, args, language, task):
-		data_pipe = Network.data_pipeline(self.dataset, [language], [task], args, mode=self.dataset_name)
+	def predict(self, args, language, lang, task):
+		data_pipe = Network.data_pipeline(self.dataset, [lang], [task], args, mode=self.dataset_name)
 		validation_steps = self._drop_parts or 1
 
 		for part_to_drop in range(validation_steps):
@@ -59,7 +59,7 @@ class Reporter():
 					gold_values = [sent_gold.numpy()[:sent_len, :sent_len] for sent_gold, sent_len
 					               in zip(tf.unstack(batch_target), batch_num_tokens)]
 					mask = [sent_mask.numpy().astype(bool)[:sent_len, :sent_len] for sent_mask, sent_len
-					        in zip(tf.unstack(batch_mask), batch_num_tokens)]
+					        	in zip(tf.unstack(batch_mask), batch_num_tokens)]
 				elif 'depth' in task:
 					pred_values = self.network.depth_probe.predict_on_batch(batch_num_tokens, batch_embeddings,
 					                                                        language, task, embedding_gate)
@@ -68,7 +68,7 @@ class Reporter():
 					gold_values = [sent_gold.numpy()[:sent_len] for sent_gold, sent_len
 					               in zip(tf.unstack(batch_target), batch_num_tokens)]
 					mask = [sent_mask.numpy().astype(bool)[:sent_len] for sent_mask, sent_len
-					        in zip(tf.unstack(batch_mask), batch_num_tokens)]
+					        	in zip(tf.unstack(batch_mask), batch_num_tokens)]
 				else:
 					raise ValueError("Unrecognized task, need to contain either `distance` or `depth` in name.")
 				yield conll_indicies, batch_num_tokens, pred_values, gold_values, mask
@@ -85,29 +85,31 @@ class CorrelationReporter(Reporter):
 
 	def write(self, args):
 		for language in self._languages:
-			for task in self._tasks:
-				prefix = '{}.{}.{}.'.format(self.dataset_name, language, task)
+			for lang in language.split('+'):                	
+				for task in self._tasks:
+					prefix = '{}.{}.{}.'.format(self.dataset_name, lang, task)
 
-				if self._probe_threshold:
-					prefix += 'gated.'
-					if self._drop_parts:
-						prefix += 'dp{}.'.format(self._drop_parts)
+					if self._probe_threshold:
+						prefix += 'gated.'
+						if self._drop_parts:
+							prefix += 'dp{}.'.format(self._drop_parts)
 
-				with open(os.path.join(args.out_dir, prefix + 'spearman'), 'w') as sperarman_f:
-					for sent_l, val in self.spearman_d[language][task].result().items():
-						sperarman_f.write(f'{sent_l}\t{val}\n')
+					with open(os.path.join(args.out_dir, prefix + 'spearman'), 'w') as sperarman_f:
+						for sent_l, val in self.spearman_d[lang][task].result().items():
+							sperarman_f.write(f'{sent_l}\t{val}\n')
 
-				with open(os.path.join(args.out_dir, prefix + 'spearman_mean'), 'w') as sperarman_mean_f:
-					result = str(np.nanmean(np.fromiter(self.spearman_d[language][task].result().values(), dtype=float)))
-					sperarman_mean_f.write(result + '\n')
+					with open(os.path.join(args.out_dir, prefix + 'spearman_mean'), 'w') as sperarman_mean_f:
+						result = str(np.nanmean(np.fromiter(self.spearman_d[lang][task].result().values(), dtype=float)))
+						sperarman_mean_f.write(result + '\n')
 
 	def compute(self, args):
 
 		for language in self._languages:
-			for task in self._tasks:
-				self.spearman_d[language][task] = Spearman()
-				for _, _, pred_values, gold_values, mask in self.predict(args, language, task):
-					self.spearman_d[language][task](gold_values, pred_values, mask)
+			for lang in language.split('+'):
+				for task in self._tasks:
+					self.spearman_d[lang][task] = Spearman()
+					for _, _, pred_values, gold_values, mask in self.predict(args, language, lang, task):
+						self.spearman_d[lang][task](gold_values, pred_values, mask)
 
 
 class UASReporter(Reporter):
@@ -138,7 +140,7 @@ class UASReporter(Reporter):
 
 		for language in self._languages:
 			self.uas[language] = UAS()
-			for conll_indices, num_tokens, pred_values, gold_values, mask in self.predict(args, language, 'dep_distance'):
+			for conll_indices, num_tokens, pred_values, gold_values, mask in self.predict(args, language, language, 'dep_distance'):
 
 				for conll_idx, sent_predicted, sent_gold, sent_len in zip(conll_indices.numpy(), pred_values, gold_values, num_tokens):
 					sent_punctuation_mask = self.punctuation_masks[language][conll_idx]
@@ -184,7 +186,7 @@ class DependencyDepthReporter(Reporter):
 	def compute(self, args):
 		results = {lang: dict() for lang in args.languages}
 		for language in args.languages:
-			for conll_indices, num_tokens, pred_values, gold_values, mask in self.predict(args, language, 'dep_depth'):
+			for conll_indices, num_tokens, pred_values, gold_values, mask in self.predict(args, language, language, 'dep_depth'):
 				for conll_idx, sent_predicted, sent_gold in zip(conll_indices.numpy(), pred_values, gold_values):
 					results[language][conll_idx] = {'predicted': sent_predicted, 'gold': sent_gold}
 
