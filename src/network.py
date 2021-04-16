@@ -183,9 +183,11 @@ class Network():
             gold_tree_weight = tf.reduce_sum(tf.where(gold_distances == 1.0, predicted_distances, 0), axis=[1,2]) / 2.
             predicted_tree_weight = tf.map_fn(compute_mst_weight, (predicted_distances, token_lens, mst_s), fn_output_signature=tf.float32, parallel_iterations=12)
 
-            #TODO: think what to do to avoid all distances converging to 0
-            return tf.reduce_mean(gold_tree_weight - predicted_tree_weight)
-
+            # Adaptation of probing loss to avoid all distances converging to 0
+            return tf.reduce_mean(tf.cast(token_lens-1, dtype=tf.float32) * (gold_tree_weight - predicted_tree_weight) /
+                                  tf.clip_by_value(predicted_tree_weight, 1., constants.MAX_TOKENS * 50.))
+                                  # tf.clip_by_value(tf.reduce_sum(predicted_distances, axis=[1,2]), 1., constants.MAX_TOKENS ** 2.))
+        
         def train_factory(self, language, task):
             # separate train function is needed to avoid variable creation on non-first call
             # see: https://github.com/tensorflow/tensorflow/issues/27120
