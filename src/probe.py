@@ -34,7 +34,8 @@ if __name__ == "__main__":
 
 	parser.add_argument("--subsample-train", default=None, type=int, help="Size of subsample taken from a training set.")
 	parser.add_argument("--zs-dep-languages", nargs='*', default=[], type=str, help="List of languages to disregard in dependency probing training (to evaluate 0 shot capability).")
-        # Specify Bert Model
+	parser.add_argument("--fs-dep-languages", nargs='*', default=[], type=str, help="List of few shot languages.")
+	# Specify Bert Model
 	parser.add_argument("--model",
 	                    default=f"bert-{constants.SIZE_BASE}-{constants.LANGUAGE_MULTILINGUAL}-{constants.CASING_CASED}",
 	                    help="Transformer model name (see: https://huggingface.co/transformers/pretrained_models.html)")

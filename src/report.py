@@ -53,6 +53,7 @@ if __name__ == "__main__":
 
 	parser.add_argument("--subsample-train", default=None, type=int, help="Size of subsample taken from a training set.")
 	parser.add_argument("--zs-dep-languages", nargs='*', default=[], type=str, help="List of languages to disregard in dependency probing training (to evaluate 0 shot capability).")
+	parser.add_argument("--fs-dep-languages", nargs='*', default=[], type=str, help="")
 	args = parser.parse_args()
 
 	args.ml_probe = not args.no_ortho_probe

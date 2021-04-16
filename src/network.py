@@ -12,11 +12,7 @@ import resource
 import constants
 from data_support.tfrecord_wrapper import TFRecordReader
 
-# this should be read from data, only temporary solution
-# TODO: get this info from tfrecord_wrapper
-DER_SIZE = 1621
-DER_TRAIN_SIZE = int(0.8 * DER_SIZE)
-DER_DEV_SIZE = int(0.1 * DER_SIZE)
+FEWSHOT_SIZE = 10
 
 central_storage_strategy = tf.distribute.experimental.CentralStorageStrategy()
 
@@ -77,6 +73,7 @@ class Network():
             self._l1_reg = args.l1
             self._optimizer = tf.optimizers.Adam(lr=self._lr)
 
+            self.fs_dep_languages = args.fs_dep_languages
             self._writer = tf.summary.create_file_writer(args.out_dir, flush_millis=10 * 1000, name='summary_writer')
 
 
@@ -209,8 +206,10 @@ class Network():
                     if self.probe._l1_reg and self.probe.ml_probe:
                         probe_l1_penalty = tf.norm(self.DistanceProbe[task], ord=1)
                         loss += l1_lambda * probe_l1_penalty
-
-                if self.probe.ml_probe:
+                
+                if self.probe.ml_probe and language in self.probe.fs_dep_languages and 'dep_' in task:
+                    variables = [self.probe.LanguageMaps[language]]
+                elif self.probe.ml_probe:
                     variables = [self.DistanceProbe[task], self.probe.LanguageMaps[language]]
                 else:
                     variables = [self.DistanceProbe[task]]
@@ -224,13 +223,16 @@ class Network():
                 with self.probe._writer.as_default(), tf.summary.record_if(self.probe._optimizer.iterations % 20 == 0
                                                                            or self.probe._optimizer.iterations == 1):
                     tf.summary.scalar("train/batch_loss_{}".format(language), loss)
-                    tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
+                    if not(language in self.probe.fs_dep_languages and 'dep_' in task):
+                        tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
+                    else: 
+                        tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[0])
                     if self.probe._orthogonal_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
                     if self.probe._l1_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/probe_l1_penalty", probe_l1_penalty)
                         tf.summary.scalar("train/l1_lambda", l1_lambda)
-                    if self.probe.ml_probe:
+                    if self.probe.ml_probe and not(language in self.probe.fs_dep_languages and 'dep_' in task):
                         tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
 
                 return loss
@@ -265,7 +267,7 @@ class Network():
             self.tasks = [task for task in args.tasks if "depth" in task]
 
             if self.probe._orthogonal_reg:
-                # if orthogonalization is used multilingual probe is only diagonal scaling
+                # when orthogonalization is used multilingual probe is only diagonal scaling
                 self.DepthProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
                                                         ((1, self.probe.probe_rank,)),
                                                         trainable=True, name=f'{task}_probe', dtype=tf.float32)
@@ -329,8 +331,9 @@ class Network():
                     if self.probe._l1_reg and self.probe.ml_probe:
                         probe_l1_penalty = tf.norm(self.DepthProbe[task], ord=1)
                         loss += l1_lambda * probe_l1_penalty
-
-                if self.probe.ml_probe:
+                if self.probe.ml_probe and language in self.probe.fs_dep_languages and 'dep_' in task:
+                    variables = [self.probe.LanguageMaps[language]]
+                elif self.probe.ml_probe:
                     variables = [self.DepthProbe[task], self.probe.LanguageMaps[language]]
                 else:
                     variables = [self.DepthProbe[task]]
@@ -344,13 +347,16 @@ class Network():
                 with self.probe._writer.as_default(), tf.summary.record_if(self.probe._optimizer.iterations % 20 == 0
                                                                            or self.probe._optimizer.iterations == 1):
                     tf.summary.scalar("train/batch_loss_{}".format(language), loss)
-                    tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
+                    if not(language in self.probe.fs_dep_languages and 'dep_' in task):
+                        tf.summary.scalar("train/probe_gradient_norm", gradient_norms[0])
+                    else:
+                        tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[0])
                     if self.probe._orthogonal_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/{}_nonorthogonality_penalty".format(language), ortho_penalty)
                     if self.probe._l1_reg and self.probe.ml_probe:
                         tf.summary.scalar("train/probe_l1_penalty", probe_l1_penalty)
                         tf.summary.scalar("train/l1_lambda", l1_lambda)
-                    if self.probe.ml_probe:
+                    if self.probe.ml_probe and not(language in self.probe.fs_dep_languages and 'dep_' in task):
                         tf.summary.scalar("train/{}_map_gradient_norm".format(language), gradient_norms[1])
 
                 return loss
@@ -421,14 +427,18 @@ class Network():
                 for task in tasks:
                     if task not in tf_data[lang]:
                         raise ValueError(f"Task: {task} not found in the data set")
-                    elif lang in args.zs_dep_languages and 'dep_' in task:
-                        continue
+                    #elif lang in args.zs_dep_languages and 'dep_' in task:
+                    #    continue
 
                     data = tf_data[lang][task]
 
                     data = data.map(partial(Network.decode, task=task, layer_idx=args.layer_index),
                             num_parallel_calls=tf.data.experimental.AUTOTUNE)
-                    if mode == 'train' and args.subsample_train:
+                    if lang in args.fs_dep_languages and 'dep_' in task and mode == 'train':
+                        data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
+                        data = data.take(FEWSHOT_SIZE)
+
+                    elif mode == 'train' and args.subsample_train:
                         data = data.shuffle(constants.SHUFFLE_SIZE, args.seed)
                         data = data.take(args.subsample_train)
                     data = data.cache()
