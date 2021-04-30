@@ -98,10 +98,11 @@ if __name__ == "__main__":
 		_, tokenizer = TFRecordWriter.get_model_tokenizer(args.model, do_lower_case=do_lower_case)
 		#tokenizer = BertTokenizer.from_pretrained(args.model, do_lower_case=do_lower_case)
 		conll_dict = {}
-		for lang in args.languages:
-			lang_conll = ConllWrapper(tf_reader.map_conll['test'][args.model][lang]['dep_distance'], tokenizer)
-			lang_conll.training_examples()
-			conll_dict[lang] = lang_conll
+		for language in args.languages:
+			for lang in language.split('+'):
+				lang_conll = ConllWrapper(tf_reader.map_conll['test'][args.model][lang]['dep_distance'], tokenizer)
+				lang_conll.training_examples()
+				conll_dict[lang] = lang_conll
 
 		if 'dep_depth' in args.tasks:
 			dep_reportet = DependencyDepthReporter(args, network, tf_reader.test, 'test')
@@ -111,3 +112,7 @@ if __name__ == "__main__":
 		uas_reporter = UASReporter(args, network, tf_reader.test, 'test', conll_dict, depths)
 		uas_reporter.compute(args)
 		uas_reporter.write(args)
+
+		uuas_reporter = UASReporter(args, network, tf_reader.test, 'test', conll_dict, None)
+		uuas_reporter.compute(args)
+		uuas_reporter.write(args)
