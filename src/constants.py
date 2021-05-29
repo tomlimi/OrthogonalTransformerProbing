@@ -23,8 +23,8 @@ pos2wnpos = {"NOUN": wn.NOUN,
              # "ADJ": wn.ADJ,
              # "ADV": wn.ADV}
              
-lang2iso = {'en': 'eng', 'es': 'spa', 'fi': 'fin', 'pl': 'pol','ar': 'arb',
-            'id': 'ind', 'zh': 'cmn', 'fr': 'fra', 'sl': 'slv'}
+lang2iso = {'en': 'eng', 'es': 'spa', 'fi': 'fin', 'pl': 'pol', 'ar': 'arb',
+        'id': 'ind', 'zh': 'cmn', 'fr': 'fra', 'sl': 'slv', 'eu': 'eus'}
 
 # BERT model parameters
 LANGUAGE_CHINESE = "chinese"
