@@ -4,6 +4,7 @@ from tqdm import tqdm
 import os
 from scipy import sparse
 from collections import defaultdict
+from ufal.chu_liu_edmonds import chu_liu_edmonds
 
 from network import Network
 
@@ -137,46 +138,79 @@ class UASReporter(Reporter):
                     with open(os.path.join(args.out_dir, prefix + 'uuas'), 'w') as uuas_f:
                         uuas_f.write(str(self.uas[lang].result())+'\n')
     
+    def undirected_tree(self, lang, conll_idx, sent_predicted, sent_gold, sent_len):
+        sent_punctuation_mask = self.punctuation_masks[lang][conll_idx]
+    
+        for i in range(sent_len):
+            for j in range(sent_len):
+                if sent_punctuation_mask[i] or sent_punctuation_mask[j]:
+                    sent_predicted[i, j] = np.inf
+                    sent_gold[i, j] = np.inf
+                else:
+                    if i > j:
+                        sent_predicted[i, j] = np.inf
+                        sent_gold[i, j] = np.inf
+                        
+        min_spanning_tree = sparse.csgraph.minimum_spanning_tree(sent_predicted).tocoo()
+        min_spanning_tree_gold = sparse.csgraph.minimum_spanning_tree(sent_gold).tocoo()
+    
+        predicted = set(map(tuple, zip(min_spanning_tree.col + 1, min_spanning_tree.row + 1)))
+        gold = set(map(tuple, zip(min_spanning_tree_gold.col + 1, min_spanning_tree_gold.row + 1)))
+        
+        return predicted, gold
+    
+    def directed_tree(self, lang, conll_idx, sent_predicted, sent_gold, sent_len):
+        sent_punctuation_mask = self.punctuation_masks[lang][conll_idx]
+        predicted_depths = self.depths[lang][conll_idx]["predicted"]
+        gold_depths = self.depths[lang][conll_idx]["gold"]
+        predicted_root = np.argmin(predicted_depths) + 1
+        gold_root = np.argmin(gold_depths) + 1
+        
+        sent_predicted_with_root = np.full((sent_predicted.shape[0]+1, sent_predicted.shape[0]+1), np.nan)
+        sent_gold_with_root = np.full((sent_gold.shape[0]+1, sent_gold.shape[0]+1), np.nan)
+        sent_predicted_with_root[1:,1:] = -sent_predicted
+        sent_gold_with_root[1:,1:] = -sent_gold
+        for i in range(sent_len):
+            # connect punctuation directtly to the root, they are disregarded anyway
+            if sent_punctuation_mask[i]:
+                sent_predicted_with_root[i+1,0] = 0.
+                sent_gold_with_root[i+1,0] = 0.
+            for j in range(sent_len):
+                if sent_punctuation_mask[i] or sent_punctuation_mask[j]:
+                    sent_predicted_with_root[i+1, j+1] = np.nan
+                    sent_gold_with_root[i+1, j+1] = np.nan
+                else:
+                    if predicted_depths[i] <= predicted_depths[j]:
+                        sent_predicted_with_root[i+1, j+1] = np.nan
+                    if gold_depths[i] <=  gold_depths[j]:
+                        sent_gold_with_root[i+1, j+1] = np.nan
+                        
+        sent_predicted_with_root[predicted_root,0] = 0.
+        sent_gold_with_root[gold_root,0] = 0.
+        
+        predicted_heads, _ = chu_liu_edmonds(sent_predicted_with_root)
+        gold_heads, gold_tree_score = chu_liu_edmonds(sent_gold_with_root)
+
+        predicted = set([(dep, head) for dep, head, is_punctuation
+                         in zip(range(1,sent_len+1), predicted_heads[1:],sent_punctuation_mask) if not is_punctuation])
+        gold = set([(dep, head) for dep, head, is_punctuation
+                    in zip(range(1,sent_len+1), gold_heads[1:],sent_punctuation_mask) if not is_punctuation])
+        # predicted = set(zip(range(1,sent_len+1),predicted_heads))
+        # gold = set(zip(range(1,sent_len+1), gold_heads))
+        
+        return predicted, gold
+        
     def compute(self, args):
         
         for language in self._languages:
             for lang in language.split('+'):
                 self.uas[lang] = UAS()
                 for conll_indices, num_tokens, pred_values, gold_values, mask in self.predict(args, language, lang, 'dep_distance'):
-                
                     for conll_idx, sent_predicted, sent_gold, sent_len in zip(conll_indices.numpy(), pred_values, gold_values, num_tokens):
-                        sent_punctuation_mask = self.punctuation_masks[lang][conll_idx]
                         if self.depths:
-                            predicted_depths = self.depths[lang][conll_idx]["predicted"]
-                            gold_depths = self.depths[lang][conll_idx]["gold"]
-                            predicted_root = np.argmin(predicted_depths) + 1
-                            gold_root = np.argmin(gold_depths) + 1
-                    
-                        for i in range(sent_len):
-                            for j in range(sent_len):
-                                if sent_punctuation_mask[i] or sent_punctuation_mask[j]:
-                                    sent_predicted[i, j] = np.inf
-                                    sent_gold[i, j] = np.inf
-                                elif self.depths is None:
-                                    if i > j:
-                                        sent_predicted[i, j] = np.inf
-                                        sent_gold[i, j] = np.inf
-                                else:
-                                    if predicted_depths[i] > predicted_depths[j]:
-                                        sent_predicted[i, j] = np.inf
-                                    if gold_depths[i] > gold_depths[j]:
-                                        sent_gold[i, j] = np.inf
-                    
-                        min_spanning_tree = sparse.csgraph.minimum_spanning_tree(sent_predicted).tocoo()
-                        min_spanning_tree_gold = sparse.csgraph.minimum_spanning_tree(sent_gold).tocoo()
-                    
-                        predicted = set(map(tuple, zip(min_spanning_tree.col + 1, min_spanning_tree.row + 1)))
-                        gold = set(map(tuple, zip(min_spanning_tree_gold.col + 1, min_spanning_tree_gold.row + 1)))
-                    
-                        if self.depths:
-                            predicted.add((predicted_root, 0))
-                            gold.add((gold_root, 0))
-                    
+                            predicted, gold = self.directed_tree(lang, conll_idx, sent_predicted, sent_gold, sent_len)
+                        else:
+                            predicted, gold = self.undirected_tree(lang, conll_idx, sent_predicted, sent_gold, sent_len)
                         self.uas[lang].update_state(gold, predicted)
 
 
