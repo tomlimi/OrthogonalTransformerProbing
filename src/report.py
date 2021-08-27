@@ -36,7 +36,10 @@ if __name__ == "__main__":
 	# Probe arguments
 	parser.add_argument("--probe-rank", default=None, type=int, help="Rank of the probe")
 	parser.add_argument("--no-ortho-probe", action="store_true", help="Resign from ortho probe (store false)")
-	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
+	parser.add_argument("--only-sv", action="store_true", help="Probe with only Scaling Vector, this option will automatically diable Orthogonal Transformation")
+	parser.add_argument("--with-sv", action="store_true", help="Probe with Scaling Vector, even without orthogonal constraint")
+	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe."
+	                                                               "If -1 all layers embeddings are averaged")
 	# Specify Transformer Model
 	parser.add_argument("--model",
 	                    default=f"bert-{constants.SIZE_BASE}-{constants.LANGUAGE_MULTILINGUAL}-{constants.CASING_CASED}",
@@ -57,6 +60,8 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	args.ml_probe = not args.no_ortho_probe
+	if args.only_sv:
+		args.ml_probe = False
 	if not args.probe_rank:
 		args.probe_rank = constants.MODEL_DIMS[args.model]
 		

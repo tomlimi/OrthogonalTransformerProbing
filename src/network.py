@@ -61,7 +61,9 @@ class Network():
             self.languages = args.languages
 
             self.ml_probe = args.ml_probe
-
+            self.only_sv = args.only_sv
+            self.with_sv = args.with_sv
+            
             self.average_layers = (args.layer_index == -1)
             
             self.LanguageMaps = {lang: tf.Variable(tf.initializers.Identity(gain=1.0)((self.model_dim, self.probe_rank)),
@@ -120,7 +122,7 @@ class Network():
             self.languages = args.languages
             self.tasks = [task for task in args.tasks if "distance" in task]
 
-            if self.probe._orthogonal_reg:
+            if self.probe._orthogonal_reg or self.probe.only_sv or self.probe.with_sv:
                 # if orthogonalization is used multilingual probe is only diagonal scaling
                 self.DistanceProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
                                                         ((1, self.probe.probe_rank,)),
@@ -142,8 +144,10 @@ class Network():
             orthogonal_projections = None
             if self.probe.ml_probe:
                 orthogonal_projections = embeddings @ self.probe.LanguageMaps[language]
-            if self.probe._orthogonal_reg and self.probe.ml_probe:
+            if (self.probe._orthogonal_reg and self.probe.ml_probe) or self.probe.with_sv:
                 projections = orthogonal_projections * self.DistanceProbe[task]
+            elif self.probe.only_sv:
+                projections = embeddings * self.DistanceProbe[task]
             else:
                 projections = embeddings @ self.DistanceProbe[task]
     
@@ -204,6 +208,7 @@ class Network():
                     target = target[:,:max_token_len,:max_token_len]
                     mask = mask[:,:max_token_len,:max_token_len]
                     predicted_distances = self._forward(embeddings, max_token_len, language, task)
+                    # Here MST loss can be used (proposed by Maudslay et al. https://arxiv.org/pdf/2005.01641.pdf)
                     #if task == 'dep_distance':
                     #    loss = self._loss_mst(predicted_distances, target, mask, token_len, mst_s)
                     #else:
@@ -277,7 +282,7 @@ class Network():
             self.languages = args.languages
             self.tasks = [task for task in args.tasks if "depth" in task]
 
-            if self.probe._orthogonal_reg:
+            if self.probe._orthogonal_reg or self.probe.only_sv or self.probe.with_sv:
                 # when orthogonalization is used multilingual probe is only diagonal scaling
                 self.DepthProbe = {task: tf.Variable(tf.random_uniform_initializer(minval=-0.5, maxval=0.5, seed=args.seed)
                                                         ((1, self.probe.probe_rank,)),
@@ -300,8 +305,10 @@ class Network():
             orthogonal_projections = None
             if self.probe.ml_probe:
                 orthogonal_projections = embeddings @ self.probe.LanguageMaps[language]
-            if self.probe._orthogonal_reg and self.probe.ml_probe:
+            if (self.probe._orthogonal_reg and self.probe.ml_probe) or self.probe.with_sv:
                 projections = orthogonal_projections * self.DepthProbe[task]
+            elif self.probe.only_sv:
+                projections = embeddings * self.DepthProbe[task]
             else:
                 projections = embeddings @ self.DepthProbe[task]
     
