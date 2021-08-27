@@ -22,7 +22,10 @@ if __name__ == "__main__":
 	# Probe arguments
 	parser.add_argument("--probe-rank", default=None, type=int, help="Rank of the probe")
 	parser.add_argument("--no-ortho-probe", action="store_true", help="Resign from ortho probe (store false)")
-	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe")
+	parser.add_argument("--only-sv", action="store_true", help="Probe with only Scaling Vector, this option will automatically diable Orthogonal Transformation")
+	parser.add_argument("--with-sv", action="store_true", help="Probe with Scaling Vector, even without orthogonal constraint")
+	parser.add_argument("--layer-index", default=6, type=int, help="Index of BERT's layer to probe."
+		 "If -1 all layers embeddings are averaged")
 	# Train arguments
 	parser.add_argument("--seed", default=42, type=int, help="Seed for variable initialisation")
 	parser.add_argument("--batch-size", default=20, type=int, help="Batch size")
@@ -35,7 +38,8 @@ if __name__ == "__main__":
 	parser.add_argument("--subsample-train", default=None, type=int, help="Size of subsample taken from a training set.")
 	parser.add_argument("--zs-dep-languages", nargs='*', default=[], type=str, help="List of languages to disregard in dependency probing training (to evaluate 0 shot capability).")
 	parser.add_argument("--fs-dep-languages", nargs='*', default=[], type=str, help="List of few shot languages.")
-	# Specify Bert Model
+	parser.add_argument("--fewshot-size", default=10, type=int, help="Number of trainining sentences for few shot languages")
+    # Specify Bert Model
 	parser.add_argument("--model",
 	                    default=f"bert-{constants.SIZE_BASE}-{constants.LANGUAGE_MULTILINGUAL}-{constants.CASING_CASED}",
 	                    help="Transformer model name (see: https://huggingface.co/transformers/pretrained_models.html)")
@@ -43,6 +47,8 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	args.ml_probe = not args.no_ortho_probe
+	if args.only_sv:
+		args.ml_probe = False
 	if not args.probe_rank:
 		args.probe_rank = constants.MODEL_DIMS[args.model]
 		
